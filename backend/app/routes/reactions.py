@@ -5,7 +5,7 @@ or DELETE clears.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -44,15 +44,16 @@ def set_reaction(
     return {"kind": body.kind}
 
 
-@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def clear_reaction(
     letter_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
+):
     existing = db.scalar(
         select(Reaction).where(Reaction.letter_id == letter_id, Reaction.user_id == user.id)
     )
     if existing:
         db.delete(existing)
         db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

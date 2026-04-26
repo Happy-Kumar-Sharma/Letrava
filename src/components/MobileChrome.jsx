@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Bell, Home, Search, Feather, Bookmark, User, ArrowLeft } from 'lucide-react';
+import { Bell, Home, Search, Feather, Bookmark, User, ArrowLeft, LogOut } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtn } from './Shared.jsx';
-import { SAMPLE_LETTERS } from '../data/letters.js';
+import { useApi } from '../lib/api.js';
 
 const TITLES = { home: 'Letrava', search: 'Search', saved: 'Saved', profile: 'Profile' };
 
-export const TopBar = ({ tab, onBell }) => (
+export const TopBar = ({ tab, onBell, onSignOut }) => (
   <header
     style={{
       flexShrink: 0,
@@ -38,6 +38,11 @@ export const TopBar = ({ tab, onBell }) => (
       <button style={iconBtn} onClick={onBell} aria-label="Notifications">
         <Bell size={20} strokeWidth={1.75} />
       </button>
+      {onSignOut && (
+        <button style={iconBtn} onClick={onSignOut} aria-label="Sign out" title="Sign out">
+          <LogOut size={20} strokeWidth={1.75} />
+        </button>
+      )}
     </div>
   </header>
 );
@@ -256,7 +261,34 @@ export const SearchScreen = ({ onOpenLetter, onOpenProfile }) => {
 };
 
 export const SavedScreen = ({ onOpenLetter }) => {
-  const saved = SAMPLE_LETTERS.slice(0, 3);
+  const { data, loading, error, refetch } = useApi('/api/saves');
+  const saved = data || [];
+
+  if (loading) {
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+        Loading…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+        <div style={{ marginBottom: 12 }}>Could not load saved letters.</div>
+        <Button variant="secondary" size="sm" onClick={refetch}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  if (saved.length === 0) {
+    return (
+      <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+        No latest feed yet
+      </div>
+    );
+  }
+
   return (
     <div>
       {saved.map((l) => (
@@ -299,8 +331,8 @@ export const SavedScreen = ({ onOpenLetter }) => {
           </div>
         </div>
       ))}
-      <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
-        Letters you save appear here. Saved letters are private.
+      <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 12 }}>
+        Saved letters are private.
       </div>
     </div>
   );

@@ -13,15 +13,9 @@ import {
 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { ScreenHeader } from './MobileChrome.jsx';
+import { useApi, putJSON, postJSON, delJSON } from '../lib/api.js';
 
-const REACTION_ICONS = {
-  Heart,
-  Lightbulb,
-  CircleDot,
-  Cloud,
-  Sun,
-  Sparkles,
-};
+const REACTION_ICONS = { Heart, Lightbulb, CircleDot, Cloud, Sun, Sparkles };
 
 const REACTIONS = [
   { key: 'like',       label: 'Like',       icon: 'Heart',     color: '#6366F1' },
@@ -32,10 +26,71 @@ const REACTIONS = [
   { key: 'inspiring',  label: 'Inspiring',  icon: 'Sparkles',  color: '#F59E0B' },
 ];
 
-export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
-  const [reaction, setReaction] = useState(null);
+export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile }) => {
+  // Always refetch to get authoritative `saved`, `my_reaction`, counters even if
+  // the seed came from a list endpoint that returned them un-personalized
+  // (e.g. trending-top-5 in Onboarding).
+  const { data: fresh, refetch } = useApi(`/api/letters/${seedLetter.id}`, [seedLetter.id]);
+  const letter = fresh || seedLetter;
+
+  const [reaction, setReaction]   = useState(letter.my_reaction || null);
+  const [saved, setSaved]         = useState(!!letter.saved);
   const [following, setFollowing] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+  const [busy, setBusy]           = useState(false);
+
+  // Sync state when the fresh fetch resolves.
+  React.useEffect(() => {
+    if (!fresh) return;
+    setReaction(fresh.my_reaction || null);
+    setSaved(!!fresh.saved);
+  }, [fresh]);
+
+  const onReact = async (key) => {
+    if (busy) return;
+    setBusy(true);
+    const next = reaction === key ? null : key;
+    setReaction(next);
+    try {
+      await putJSON(`/api/letters/${letter.id}/reactions`, { kind: next });
+      refetch();
+    } catch (err) {
+      console.error('reaction failed', err);
+      setReaction(reaction); // revert
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onToggleSave = async () => {
+    if (busy) return;
+    setBusy(true);
+    const wasSaved = saved;
+    setSaved(!wasSaved);
+    try {
+      if (wasSaved) await delJSON(`/api/letters/${letter.id}/save`);
+      else await postJSON(`/api/letters/${letter.id}/save`, {});
+      refetch();
+    } catch (err) {
+      console.error('save failed', err);
+      setSaved(wasSaved);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onToggleFollow = async () => {
+    if (busy || !letter.author?.id) return;
+    setBusy(true);
+    try {
+      if (following) await delJSON(`/api/users/${letter.author.id}/follow`);
+      else           await postJSON(`/api/users/${letter.author.id}/follow`, {});
+      setFollowing(!following);
+    } catch (err) {
+      console.error('follow failed', err);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div>
@@ -46,10 +101,11 @@ export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
           <>
             <button
               style={iconBtnSm}
-              onClick={() => setBookmarked(!bookmarked)}
-              aria-label={bookmarked ? 'Saved' : 'Save'}
+              onClick={onToggleSave}
+              aria-label={saved ? 'Saved' : 'Save'}
+              disabled={busy}
             >
-              {bookmarked ? (
+              {saved ? (
                 <BookmarkCheck size={20} color="#6366F1" strokeWidth={1.75} />
               ) : (
                 <Bookmark size={20} color="#374151" strokeWidth={1.75} />
@@ -78,13 +134,14 @@ export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
             {letter.author.name}
           </div>
           <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-            {letter.age} ago · {letter.readTime} read
+            {letter.age} ago · {letter.read_time} read
           </div>
         </div>
         <Button
           variant={following ? 'pillSec' : 'pill'}
           size="sm"
-          onClick={() => setFollowing(!following)}
+          onClick={onToggleFollow}
+          disabled={busy}
         >
           {following ? 'Following' : 'Follow'}
         </Button>
@@ -113,17 +170,19 @@ export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
             color: '#1F2937',
           }}
         >
-          {letter.body.split('\n\n').map((p, i) => (
+          {(letter.body || '').split('\n\n').map((p, i) => (
             <p key={i} style={{ margin: '0 0 18px' }}>
               {p}
             </p>
           ))}
         </article>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 20 }}>
-          {letter.tags.map((t) => (
-            <Tag key={t}>#{t}</Tag>
-          ))}
-        </div>
+        {letter.tags && letter.tags.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 20 }}>
+            {letter.tags.map((t) => (
+              <Tag key={t}>#{t}</Tag>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Reactions */}
@@ -145,7 +204,8 @@ export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
             return (
               <button
                 key={r.key}
-                onClick={() => setReaction(active ? null : r.key)}
+                onClick={() => onReact(r.key)}
+                disabled={busy}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -170,44 +230,31 @@ export const LetterDetail = ({ letter, onBack, onOpenProfile }) => {
       </div>
 
       {/* Comments */}
-      <CommentsSection />
+      <CommentsSection letterId={letter.id} />
     </div>
   );
 };
 
-const CommentsSection = () => {
+const CommentsSection = ({ letterId }) => {
+  const { data, loading, error, refetch } = useApi(`/api/letters/${letterId}/comments`, [letterId]);
+  const comments = data || [];
   const [draft, setDraft] = useState('');
-  const comments = [
-    {
-      id: 1,
-      name: '@calmlines',
-      palette: 'amber',
-      age: '2h',
-      body: 'The radiator clicking, the tea cup. You captured something I have been trying to put down for months. Thank you.',
-    },
-    {
-      id: 2,
-      name: '@nightowl_p',
-      palette: 'violet',
-      age: '4h',
-      body: 'I read this twice. The second time I was crying about something completely unrelated.',
-      replies: [
-        {
-          name: '@hannah_writes',
-          palette: 'indigo',
-          age: '3h',
-          body: 'Thank you. That is exactly the response I hoped for.',
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: '@rv_letters',
-      palette: 'teal',
-      age: '6h',
-      body: 'Saved. I am going to write a reply letter this evening.',
-    },
-  ];
+  const [posting, setPosting] = useState(false);
+
+  const post = async () => {
+    if (!draft.trim() || posting) return;
+    setPosting(true);
+    try {
+      await postJSON(`/api/letters/${letterId}/comments`, { body: draft.trim() });
+      setDraft('');
+      refetch();
+    } catch (err) {
+      console.error('comment failed', err);
+    } finally {
+      setPosting(false);
+    }
+  };
+
   return (
     <section style={{ padding: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 14 }}>
@@ -215,7 +262,7 @@ const CommentsSection = () => {
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <Avatar name="@hannah_writes" size={32} />
+        <Avatar name="@you" size={32} />
         <div style={{ flex: 1 }}>
           <textarea
             value={draft}
@@ -235,17 +282,41 @@ const CommentsSection = () => {
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-            <Button variant="primary" size="sm" disabled={!draft.trim()}>
-              Post
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={post}
+              disabled={!draft.trim() || posting}
+            >
+              {posting ? 'Posting…' : 'Post'}
             </Button>
           </div>
         </div>
       </div>
 
+      {loading && (
+        <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>Loading comments…</div>
+      )}
+      {error && (
+        <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>
+          Could not load comments.
+        </div>
+      )}
+      {!loading && !error && comments.length === 0 && (
+        <div style={{ padding: '8px 0 16px', color: '#9CA3AF', fontSize: 13 }}>
+          No latest feed yet
+        </div>
+      )}
+
       {comments.map((c) => (
         <div key={c.id} style={{ marginBottom: 18 }}>
-          <Comment {...c} />
-          {c.replies && (
+          <Comment
+            name={c.author?.name}
+            palette={c.author?.palette}
+            age={c.age}
+            body={c.body}
+          />
+          {c.replies && c.replies.length > 0 && (
             <div
               style={{
                 marginLeft: 40,
@@ -255,8 +326,15 @@ const CommentsSection = () => {
                 gap: 14,
               }}
             >
-              {c.replies.map((r, i) => (
-                <Comment key={i} {...r} reply />
+              {c.replies.map((r) => (
+                <Comment
+                  key={r.id}
+                  name={r.author?.name}
+                  palette={r.author?.palette}
+                  age={r.age}
+                  body={r.body}
+                  reply
+                />
               ))}
             </div>
           )}

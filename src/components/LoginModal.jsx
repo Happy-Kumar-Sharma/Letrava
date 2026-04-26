@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail } from 'lucide-react';
 import { Button } from './Shared.jsx';
+import { supabase } from '../lib/supabase.js';
 
 const lbl = { display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 4 };
 const inp = {
@@ -20,6 +21,25 @@ export const LoginModal = ({ onClose, onAuth }) => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const sendMagicLink = async () => {
+    setError('');
+    setSubmitting(true);
+    try {
+      const { error: err } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (err) throw err;
+      setSent(true);
+    } catch (e) {
+      setError(e?.message || 'Could not send sign-in link.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div
@@ -101,8 +121,8 @@ export const LoginModal = ({ onClose, onAuth }) => {
             <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 18 }}>
               Sign-in link sent to <strong style={{ color: '#111827' }}>{email}</strong>.
             </div>
-            <Button variant="primary" onClick={onAuth} style={{ width: '100%', justifyContent: 'center' }}>
-              Continue (demo)
+            <Button variant="primary" onClick={onClose} style={{ width: '100%', justifyContent: 'center' }}>
+              Close
             </Button>
           </div>
         ) : (
@@ -146,12 +166,21 @@ export const LoginModal = ({ onClose, onAuth }) => {
             </div>
             <Button
               variant="primary"
-              onClick={() => (mode === 'signup' ? setSent(true) : onAuth())}
-              disabled={!email}
+              onClick={sendMagicLink}
+              disabled={!email || submitting}
               style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }}
             >
-              {mode === 'signin' ? 'Email me a sign-in link' : 'Create account'}
+              {submitting
+                ? 'Sending…'
+                : mode === 'signin'
+                  ? 'Email me a sign-in link'
+                  : 'Create account'}
             </Button>
+            {error && (
+              <div style={{ fontSize: 12, color: '#B91C1C', textAlign: 'center', marginBottom: 8 }}>
+                {error}
+              </div>
+            )}
             <div style={{ textAlign: 'center', fontSize: 13, color: '#6B7280' }}>
               {mode === 'signin' ? (
                 <>

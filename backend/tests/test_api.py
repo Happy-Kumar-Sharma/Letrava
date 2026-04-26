@@ -309,4 +309,3 @@ def test_reaction_kind_check_at_db(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
-ollback()

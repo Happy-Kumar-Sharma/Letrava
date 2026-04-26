@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Button } from './Shared.jsx';
+import { postJSON } from '../lib/api.js';
 
 const MOODS = [
   { key: 'hopeful', label: 'Hopeful', color: '#E07856' },
@@ -9,6 +10,10 @@ const MOODS = [
   { key: 'tender', label: 'Tender', color: '#14B8A6' },
 ];
 
+/**
+ * Editor — full-screen composer.
+ * Calls onSubmit(newLetter) after successful publish so the shell can refresh.
+ */
 export const Editor = ({ onClose, onSubmit }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -16,6 +21,8 @@ export const Editor = ({ onClose, onSubmit }) => {
   const [tagDraft, setTagDraft] = useState('');
   const [mood, setMood] = useState('hopeful');
   const [savedAt, setSavedAt] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!title && !body) return;
@@ -30,6 +37,29 @@ export const Editor = ({ onClose, onSubmit }) => {
       e.preventDefault();
       setTags([...tags, tagDraft.trim().replace(/^#/, '')]);
       setTagDraft('');
+    }
+  };
+
+  const publish = async () => {
+    setError('');
+    if (!title.trim() || !body.trim()) {
+      setError('Title and body are required.');
+      return;
+    }
+    setPublishing(true);
+    try {
+      const created = await postJSON('/api/letters', {
+        title: title.trim(),
+        body,
+        tags,
+        mood,
+      });
+      onSubmit?.(created);
+    } catch (err) {
+      const msg = err?.body?.detail || err?.message || 'Could not publish letter.';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -79,12 +109,32 @@ export const Editor = ({ onClose, onSubmit }) => {
             'New letter'
           )}
         </div>
-        <Button variant="primary" size="sm" onClick={onSubmit} disabled={!title || !body}>
-          Publish
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={publish}
+          disabled={!title || !body || publishing}
+        >
+          {publishing ? 'Publishing…' : 'Publish'}
         </Button>
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }}>
+        {error && (
+          <div
+            style={{
+              fontSize: 12,
+              color: '#B91C1C',
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
+              padding: '8px 12px',
+              borderRadius: 8,
+              marginBottom: 12,
+            }}
+          >
+            {error}
+          </div>
+        )}
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}

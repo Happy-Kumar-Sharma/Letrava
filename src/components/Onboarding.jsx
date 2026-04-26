@@ -1,10 +1,12 @@
 import React from 'react';
 import { Flame, Heart, MessageCircle } from 'lucide-react';
 import { Button } from './Shared.jsx';
-import { SAMPLE_LETTERS } from '../data/letters.js';
+import { useApi } from '../lib/api.js';
 
 export const Onboarding = ({ onSignIn, onOpenLetter }) => {
-  const top5 = SAMPLE_LETTERS.slice(0, 5);
+  const { data: top5, loading, error } = useApi('/api/letters?feed=trending&limit=5');
+  const list = top5 || [];
+
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Hero */}
@@ -65,7 +67,20 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
           <Flame size={12} strokeWidth={1.75} />
           Trending today · top 5
         </div>
-        {top5.map((l, i) => (
+
+        {loading && <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>}
+        {error && (
+          <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>
+            Could not load trending letters.
+          </div>
+        )}
+        {!loading && !error && list.length === 0 && (
+          <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>
+            No latest feed yet
+          </div>
+        )}
+
+        {list.map((l, i) => (
           <div
             key={l.id}
             onClick={() => onOpenLetter(l)}
@@ -73,7 +88,7 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
               display: 'flex',
               gap: 12,
               padding: '12px 0',
-              borderBottom: i < 4 ? '1px solid #EDEAE2' : 'none',
+              borderBottom: i < list.length - 1 ? '1px solid #EDEAE2' : 'none',
               cursor: 'pointer',
             }}
           >
@@ -121,6 +136,7 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
             </div>
           </div>
         ))}
+
         <div
           style={{
             marginTop: 14,
@@ -134,7 +150,7 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>2,847 more letters waiting.</div>
+          <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>More letters waiting.</div>
           <Button variant="primary" size="sm" onClick={onSignIn}>
             Sign in
           </Button>

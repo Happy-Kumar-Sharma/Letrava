@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -34,7 +35,6 @@ def create_letter(
     upsert_tags(db, letter.id, body.tags)
     db.commit()
     db.refresh(letter)
-    # Re-load with author eager
     letter = db.scalar(
         select(Letter).options(selectinload(Letter.author)).where(Letter.id == letter.id)
     )
@@ -45,6 +45,7 @@ def create_letter(
 def list_letters(
     feed: Literal["trending", "latest", "following"] = Query("latest"),
     limit: int = Query(20, ge=1, le=50),
+    author: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     viewer: Optional[User] = Depends(get_optional_user),
 ) -> list[dict]:
@@ -52,7 +53,6 @@ def list_letters(
     if feed == "latest":
         stmt = stmt.order_by(Letter.created_at.desc())
     elif feed == "trending":
-        # Trending: order by reaction count (last 7 days reactions weight, simple v1)
         sub = (
             select(Reaction.letter_id, func.count().label("rcount"))
             .group_by(Reaction.letter_id)
@@ -69,6 +69,9 @@ def list_letters(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Login required for following feed")
         followee_ids = select(Follow.followee_id).where(Follow.follower_id == viewer.id)
         stmt = stmt.where(Letter.author_id.in_(followee_ids)).order_by(Letter.created_at.desc())
+
+    if author is not None:
+        stmt = stmt.where(Letter.author_id == author)
 
     stmt = stmt.limit(limit)
     letters = db.scalars(stmt).all()
@@ -90,12 +93,12 @@ def get_letter(
     return letter_to_dict(db, letter, viewer.id if viewer else None)
 
 
-@router.delete("/{letter_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{letter_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def delete_letter(
     letter_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
+):
     letter = db.get(Letter, letter_id)
     if not letter:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
@@ -103,3 +106,4 @@ def delete_letter(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your letter")
     db.delete(letter)
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

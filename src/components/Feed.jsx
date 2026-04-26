@@ -9,7 +9,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { Avatar, Tag, Button } from './Shared.jsx';
-import { SAMPLE_LETTERS } from '../data/letters.js';
+import { useApi, putJSON, delJSON, postJSON } from '../lib/api.js';
 
 const TABS = [
   { key: 'trending', label: 'Trending' },
@@ -19,15 +19,7 @@ const TABS = [
 
 export const Feed = ({ onOpenLetter, onOpenProfile }) => {
   const [mode, setMode] = useState('trending');
-  const [bookmarked, setBookmarked] = useState(new Set([2]));
-
-  const toggleBookmark = (id) => {
-    setBookmarked((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  const { data: letters, loading, error, refetch } = useApi(`/api/letters?feed=${mode}`, [mode]);
 
   return (
     <div>
@@ -64,7 +56,8 @@ export const Feed = ({ onOpenLetter, onOpenProfile }) => {
         ))}
       </div>
 
-      {/* Prompt of the week */}
+      {/* Prompt of the week — kept static for now; backend has /api/prompts/current
+          but the schema lives in the existing v1 cut, wire later. */}
       <div style={{ padding: 16 }}>
         <div style={{ padding: 16, borderRadius: 14, background: '#FFF7F2', border: '1px solid #F5C9B6' }}>
           <div
@@ -102,12 +95,22 @@ export const Feed = ({ onOpenLetter, onOpenProfile }) => {
       </div>
 
       {/* Letters */}
-      {SAMPLE_LETTERS.map((l) => (
+      {loading && <Empty text="Loading letters…" />}
+      {error && (
+        <Empty
+          text={`Could not load feed. ${error?.message || ''}`}
+          actionLabel="Try again"
+          onAction={refetch}
+        />
+      )}
+      {!loading && !error && letters && letters.length === 0 && (
+        <Empty text="No latest feed yet" />
+      )}
+      {!loading && !error && letters && letters.map((l) => (
         <FeedLetter
           key={l.id}
           letter={l}
-          bookmarked={bookmarked.has(l.id)}
-          onBookmark={() => toggleBookmark(l.id)}
+          onChanged={refetch}
           onOpen={() => onOpenLetter(l)}
           onOpenProfile={() => onOpenProfile(l.author)}
         />
@@ -116,101 +119,143 @@ export const Feed = ({ onOpenLetter, onOpenProfile }) => {
   );
 };
 
-const FeedLetter = ({ letter, bookmarked, onBookmark, onOpen, onOpenProfile }) => (
-  <article
-    onClick={onOpen}
-    style={{ padding: 16, borderBottom: '1px solid #F3F4F6', cursor: 'pointer', background: '#fff' }}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-      <span
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenProfile();
-        }}
-        style={{ cursor: 'pointer' }}
-      >
-        <Avatar name={letter.author.name} size={32} palette={letter.author.palette} />
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
+const FeedLetter = ({ letter, onChanged, onOpen, onOpenProfile }) => {
+  // Optimistic local state on top of server-truth values.
+  const [saved, setSaved]       = useState(!!letter.saved);
+  const [saveCount, setSaveCt]  = useState(letter.saves);
+  const [busy, setBusy]         = useState(false);
+
+  const toggleBookmark = async (e) => {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    const wasSaved = saved;
+    setSaved(!wasSaved);
+    setSaveCt((n) => n + (wasSaved ? -1 : 1));
+    try {
+      if (wasSaved) {
+        await delJSON(`/api/letters/${letter.id}/save`);
+      } else {
+        await postJSON(`/api/letters/${letter.id}/save`, {});
+      }
+      onChanged?.();
+    } catch (err) {
+      // revert
+      setSaved(wasSaved);
+      setSaveCt((n) => n + (wasSaved ? 1 : -1));
+      console.error('save toggle failed', err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article
+      onClick={onOpen}
+      style={{ padding: 16, borderBottom: '1px solid #F3F4F6', cursor: 'pointer', background: '#fff' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span
           onClick={(e) => {
             e.stopPropagation();
             onOpenProfile();
           }}
-          style={{ fontSize: 13, fontWeight: 600, color: '#111827', cursor: 'pointer' }}
+          style={{ cursor: 'pointer' }}
         >
-          {letter.author.name}
+          <Avatar name={letter.author.name} size={32} palette={letter.author.palette} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenProfile();
+            }}
+            style={{ fontSize: 13, fontWeight: 600, color: '#111827', cursor: 'pointer' }}
+          >
+            {letter.author.name}
+          </div>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+            {letter.age} ago · {letter.read_time} read
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>
-          {letter.age} ago · {letter.readTime} read
-        </div>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          aria-label="More"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: '#9CA3AF' }}
+        >
+          <MoreHorizontal size={18} strokeWidth={1.75} />
+        </button>
       </div>
-      <button
-        onClick={(e) => e.stopPropagation()}
-        aria-label="More"
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: '#9CA3AF' }}
-      >
-        <MoreHorizontal size={18} strokeWidth={1.75} />
-      </button>
-    </div>
-    <h3
-      style={{
-        fontFamily: 'Fraunces, Georgia, serif',
-        fontSize: 20,
-        fontWeight: 500,
-        lineHeight: 1.2,
-        letterSpacing: '-0.005em',
-        color: '#111827',
-        margin: '0 0 8px',
-      }}
-    >
-      {letter.title}
-    </h3>
-    <p
-      style={{
-        fontFamily: 'Fraunces, Georgia, serif',
-        fontSize: 15,
-        lineHeight: 1.55,
-        color: '#4B5563',
-        margin: '0 0 12px',
-        display: '-webkit-box',
-        WebkitLineClamp: 3,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-      }}
-    >
-      {letter.excerpt}
-    </p>
-    <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-      {letter.tags.slice(0, 3).map((t) => (
-        <Tag key={t}>#{t}</Tag>
-      ))}
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', color: '#6B7280', fontSize: 13 }}>
-      <button onClick={(e) => e.stopPropagation()} style={actionBtn} aria-label="React">
-        <Heart size={18} strokeWidth={1.75} />
-        <span>{letter.reactions}</span>
-      </button>
-      <button onClick={(e) => e.stopPropagation()} style={actionBtn} aria-label="Comments">
-        <MessageCircle size={18} strokeWidth={1.75} />
-        <span>{letter.comments}</span>
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onBookmark();
+      <h3
+        style={{
+          fontFamily: 'Fraunces, Georgia, serif',
+          fontSize: 20,
+          fontWeight: 500,
+          lineHeight: 1.2,
+          letterSpacing: '-0.005em',
+          color: '#111827',
+          margin: '0 0 8px',
         }}
-        style={{ ...actionBtn, color: bookmarked ? '#6366F1' : '#6B7280' }}
-        aria-label={bookmarked ? 'Saved' : 'Save'}
       >
-        {bookmarked ? <BookmarkCheck size={18} strokeWidth={1.75} /> : <Bookmark size={18} strokeWidth={1.75} />}
-        <span>{letter.saves}</span>
-      </button>
-      <button onClick={(e) => e.stopPropagation()} style={{ ...actionBtn, marginLeft: 'auto' }} aria-label="Share">
-        <Share2 size={18} strokeWidth={1.75} />
-      </button>
-    </div>
-  </article>
+        {letter.title}
+      </h3>
+      <p
+        style={{
+          fontFamily: 'Fraunces, Georgia, serif',
+          fontSize: 15,
+          lineHeight: 1.55,
+          color: '#4B5563',
+          margin: '0 0 12px',
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {letter.excerpt}
+      </p>
+      {letter.tags && letter.tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {letter.tags.slice(0, 3).map((t) => (
+            <Tag key={t}>#{t}</Tag>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', color: '#6B7280', fontSize: 13 }}>
+        <button onClick={(e) => e.stopPropagation()} style={actionBtn} aria-label="React">
+          <Heart size={18} strokeWidth={1.75} color={letter.my_reaction ? '#6366F1' : '#6B7280'} />
+          <span>{letter.reactions}</span>
+        </button>
+        <button onClick={(e) => e.stopPropagation()} style={actionBtn} aria-label="Comments">
+          <MessageCircle size={18} strokeWidth={1.75} />
+          <span>{letter.comments}</span>
+        </button>
+        <button
+          onClick={toggleBookmark}
+          style={{ ...actionBtn, color: saved ? '#6366F1' : '#6B7280' }}
+          aria-label={saved ? 'Saved' : 'Save'}
+          disabled={busy}
+        >
+          {saved ? <BookmarkCheck size={18} strokeWidth={1.75} /> : <Bookmark size={18} strokeWidth={1.75} />}
+          <span>{saveCount}</span>
+        </button>
+        <button onClick={(e) => e.stopPropagation()} style={{ ...actionBtn, marginLeft: 'auto' }} aria-label="Share">
+          <Share2 size={18} strokeWidth={1.75} />
+        </button>
+      </div>
+    </article>
+  );
+};
+
+const Empty = ({ text, actionLabel, onAction }) => (
+  <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+    <div style={{ marginBottom: actionLabel ? 12 : 0 }}>{text}</div>
+    {actionLabel && (
+      <Button variant="secondary" size="sm" onClick={onAction}>
+        {actionLabel}
+      </Button>
+    )}
+  </div>
 );
 
 const actionBtn = {
