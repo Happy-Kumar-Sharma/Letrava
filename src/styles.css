@@ -1,0 +1,240 @@
+/* ============================================================
+   Letrava — Colors & Type
+   "Soft Social Minimal" — a thoughtful writing platform
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Core palette */
+  --ltv-ink:        #111827;
+  --ltv-bg:         #FFFFFF;
+  --ltv-indigo:     #6366F1;
+  --ltv-indigo-2:   #A5B4FC;
+  --ltv-muted:      #9CA3AF;
+
+  /* Extended neutrals */
+  --ltv-paper:      #FAFAF7;
+  --ltv-cream:      #F5F1E8;
+  --ltv-stone-50:   #F9FAFB;
+  --ltv-stone-100:  #F3F4F6;
+  --ltv-stone-200:  #E5E7EB;
+  --ltv-stone-300:  #D1D5DB;
+  --ltv-stone-400:  #9CA3AF;
+  --ltv-stone-500:  #6B7280;
+  --ltv-stone-600:  #4B5563;
+  --ltv-stone-700:  #374151;
+  --ltv-stone-800:  #1F2937;
+  --ltv-stone-900:  #111827;
+
+  /* Indigo scale */
+  --ltv-indigo-50:  #EEF2FF;
+  --ltv-indigo-100: #E0E7FF;
+  --ltv-indigo-200: #C7D2FE;
+  --ltv-indigo-300: #A5B4FC;
+  --ltv-indigo-400: #818CF8;
+  --ltv-indigo-500: #6366F1;
+  --ltv-indigo-600: #4F46E5;
+  --ltv-indigo-700: #4338CA;
+
+  /* Editorial warm accent (logo feather) */
+  --ltv-quill:      #E07856;
+  --ltv-quill-soft: #F5C9B6;
+
+  /* Semantic foreground */
+  --fg-1: var(--ltv-ink);
+  --fg-2: var(--ltv-stone-600);
+  --fg-3: var(--ltv-stone-500);
+  --fg-muted: var(--ltv-muted);
+  --fg-on-accent: #FFFFFF;
+  --fg-link: var(--ltv-indigo-600);
+
+  /* Semantic background */
+  --bg-1: var(--ltv-bg);
+  --bg-2: var(--ltv-stone-50);
+  --bg-3: var(--ltv-paper);
+  --bg-accent-soft: var(--ltv-indigo-50);
+
+  /* Borders */
+  --border-1: var(--ltv-stone-200);
+  --border-2: var(--ltv-stone-300);
+  --border-strong: var(--ltv-stone-800);
+
+  /* Reaction colors */
+  --rx-like:       #6366F1;
+  --rx-thoughtful: #8B5CF6;
+  --rx-relatable:  #14B8A6;
+  --rx-sad:        #64748B;
+  --rx-hopeful:    #E07856;
+  --rx-inspiring:  #F59E0B;
+
+  /* Status */
+  --status-success: #10B981;
+  --status-warn:    #F59E0B;
+  --status-danger:  #EF4444;
+  --status-info:    var(--ltv-indigo-500);
+
+  /* Type families */
+  --font-display: 'Fraunces', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-letter:  'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Type scale */
+  --fs-display:  clamp(48px, 6vw, 72px);
+  --fs-h1:       clamp(36px, 4vw, 48px);
+  --fs-h2:       32px;
+  --fs-h3:       24px;
+  --fs-h4:       20px;
+  --fs-lg:       18px;
+  --fs-body:     16px;
+  --fs-sm:       14px;
+  --fs-xs:       12px;
+  --fs-letter:   19px;
+
+  /* Line heights */
+  --lh-tight:   1.1;
+  --lh-snug:    1.25;
+  --lh-normal:  1.5;
+  --lh-reading: 1.7;
+
+  /* Spacing */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px; --sp-16: 64px; --sp-20: 80px;
+
+  /* Radii */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-pill: 999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.06), 0 2px 4px rgba(17, 24, 39, 0.04);
+  --shadow-lg: 0 12px 32px rgba(17, 24, 39, 0.08), 0 4px 8px rgba(17, 24, 39, 0.04);
+  --shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.18);
+
+  /* Motion */
+  --ease-out:   cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-soft:  cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-fast:   120ms;
+  --dur-base:   200ms;
+  --dur-slow:   320ms;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: #F3F2EE;
+  color: var(--ltv-ink);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { text-decoration: none; }
+button { font-family: inherit; }
+button:disabled { opacity: 0.5; cursor: not-allowed !important; }
+
+/* Phone-shaped app shell — mobile-first design rendered in a portrait frame on desktop */
+.ltv-shell-wrap {
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; min-height: 100vh; min-height: 100dvh;
+  gap: 32px;
+}
+
+.ltv-shell {
+  width: 420px; height: 860px;
+  background: var(--ltv-bg);
+  border-radius: 36px;
+  border: 1px solid var(--border-1);
+  box-shadow: 0 30px 80px rgba(17, 24, 39, 0.10), 0 8px 20px rgba(17, 24, 39, 0.06);
+  overflow: hidden;
+  position: relative;
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Desktop context sidebar */
+.desktop-context {
+  width: 240px;
+  color: var(--ltv-stone-500);
+  font-size: 13px;
+  line-height: 1.55;
+  display: none;
+}
+@media (min-width: 1100px) {
+  .desktop-context { display: block; }
+}
+
+/* On phones, the shell fills the viewport */
+@media (max-width: 540px) {
+  body { background: #fff; }
+  .ltv-shell-wrap { padding: 0; gap: 0; }
+  .ltv-shell {
+    width: 100%;
+    height: 100vh; height: 100dvh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+.ltv-screen {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  background: var(--ltv-bg);
+}
+.ltv-screen::-webkit-scrollbar { width: 0; }
+
+/* Focus ring */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Type element styles */
+.ltv-display {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  font-weight: 400;
+  color: var(--fg-1);
+  font-variation-settings: "opsz" 144;
+}
+.ltv-h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.015em;
+  font-weight: 500;
+  color: var(--fg-1);
+  font-variation-settings: "opsz" 96;
+}
+.ltv-h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: var(--lh-snug);
+  letter-spacing: -0.01em;
+  font-weight: 500;
+  color: var(--fg-1);
+}
+.ltv-eyebrow {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ltv-indigo-600);
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
