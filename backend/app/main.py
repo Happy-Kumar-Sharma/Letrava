@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .routes import auth_routes, comments, follows, letters, me, prompts, reactions, saves
+from .routes import auth_routes, comments, follows, letters, me, prompts, reactions, saves, search
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(follows.router)
     app.include_router(saves.router)
     app.include_router(prompts.router)
+    app.include_router(search.router)
 
     @app.get("/health")
     def health() -> dict:

@@ -37,10 +37,17 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class ProfileUpdate(BaseModel):
+    palette: Optional[Palette] = None
+    bio: Optional[str] = None
+    avatar: Optional[str] = None  # base64 data URL or None to clear
+
+
 class AuthorOut(BaseModel):
     id: uuid.UUID
     name: str
     palette: str
+    avatar: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -57,6 +64,7 @@ class UserOut(BaseModel):
     email: str
     palette: str
     bio: str
+    avatar: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -67,6 +75,7 @@ class UserPublic(BaseModel):
     username: str
     palette: str
     bio: str
+    avatar: Optional[str] = None
     letters_count: int
     followers_count: int
     following_count: int

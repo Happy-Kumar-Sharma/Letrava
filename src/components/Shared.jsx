@@ -37,7 +37,16 @@ const PALETTES = {
   amber:  { bg: '#FEF3C7', fg: '#B45309' },
 };
 
-export const Avatar = ({ name = '?', size = 36, palette = 'indigo' }) => {
+export const Avatar = ({ name = '?', size = 36, palette = 'indigo', src = null }) => {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, display: 'block' }}
+      />
+    );
+  }
   const p = PALETTES[palette] || PALETTES.indigo;
   const initials = name.replace('@', '').slice(0, 1).toUpperCase();
   return (

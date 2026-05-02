@@ -38,6 +38,7 @@ def get_user(
         username=u.username,
         palette=u.palette,
         bio=u.bio,
+        avatar=u.avatar,
         letters_count=letters_count,
         followers_count=followers,
         following_count=following,

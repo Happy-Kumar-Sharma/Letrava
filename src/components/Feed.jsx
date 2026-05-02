@@ -17,9 +17,10 @@ const TABS = [
   { key: 'following', label: 'Following' },
 ];
 
-export const Feed = ({ onOpenLetter, onOpenProfile }) => {
+export const Feed = ({ onOpenLetter, onOpenProfile, onWrite }) => {
   const [mode, setMode] = useState('trending');
   const { data: letters, loading, error, refetch } = useApi(`/api/letters?feed=${mode}`, [mode]);
+  const { data: prompt } = useApi('/api/prompts/current');
 
   return (
     <div>
@@ -56,43 +57,23 @@ export const Feed = ({ onOpenLetter, onOpenProfile }) => {
         ))}
       </div>
 
-      {/* Prompt of the week — kept static for now; backend has /api/prompts/current
-          but the schema lives in the existing v1 cut, wire later. */}
-      <div style={{ padding: 16 }}>
-        <div style={{ padding: 16, borderRadius: 14, background: '#FFF7F2', border: '1px solid #F5C9B6' }}>
-          <div
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: '#B85E3E',
-              marginBottom: 6,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <Feather size={12} strokeWidth={1.75} />
-            Prompt of the week
+      {/* Prompt of the week */}
+      {prompt && (
+        <div style={{ padding: 16 }}>
+          <div style={{ padding: 16, borderRadius: 14, background: '#FFF7F2', border: '1px solid #F5C9B6' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#B85E3E', marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Feather size={12} strokeWidth={1.75} />
+              Prompt of the week
+            </div>
+            <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 18, fontWeight: 500, color: '#111827', lineHeight: 1.3, marginBottom: 12 }}>
+              {prompt.prompt}
+            </div>
+            <Button variant="secondary" size="sm" icon={Feather} onClick={() => onWrite?.(prompt.prompt)}>
+              Write a response
+            </Button>
           </div>
-          <div
-            style={{
-              fontFamily: 'Fraunces, Georgia, serif',
-              fontSize: 18,
-              fontWeight: 500,
-              color: '#111827',
-              lineHeight: 1.3,
-              marginBottom: 12,
-            }}
-          >
-            What is ordinary in your life today that may disappear later?
-          </div>
-          <Button variant="secondary" size="sm" icon={Feather}>
-            Write a response
-          </Button>
         </div>
-      </div>
+      )}
 
       {/* Letters */}
       {loading && <Empty text="Loading letters…" />}

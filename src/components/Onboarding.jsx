@@ -36,17 +36,18 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
         </p>
         <Button
           variant="primary"
-          onClick={onSignIn}
+          onClick={() => onSignIn('signup')}
           style={{ width: '100%', justifyContent: 'center', padding: '12px 18px' }}
         >
           Create account
         </Button>
-        <div style={{ fontSize: 13, color: '#6B7280', marginTop: 12 }}>
-          Have one?{' '}
-          <a onClick={onSignIn} style={{ color: '#4338CA', cursor: 'pointer', fontWeight: 500 }}>
-            Sign in
-          </a>
-        </div>
+        <Button
+          variant="secondary"
+          onClick={() => onSignIn('signin')}
+          style={{ width: '100%', justifyContent: 'center', padding: '12px 18px', marginTop: 10 }}
+        >
+          Sign in
+        </Button>
       </div>
 
       {/* Top 5 trending preview */}
@@ -151,8 +152,8 @@ export const Onboarding = ({ onSignIn, onOpenLetter }) => {
           }}
         >
           <div style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>More letters waiting.</div>
-          <Button variant="primary" size="sm" onClick={onSignIn}>
-            Sign in
+          <Button variant="primary" size="sm" onClick={() => onSignIn('signup')}>
+            Get started
           </Button>
         </div>
       </div>

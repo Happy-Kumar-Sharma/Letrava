@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Bell, Home, Search, Feather, Bookmark, User, ArrowLeft, LogOut } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Bell, Home, Search, Feather, Bookmark, User, ArrowLeft, LogOut, Heart, MessageCircle } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtn } from './Shared.jsx';
+import { getJSON, postJSON, delJSON } from '../lib/api.js';
 import { useApi } from '../lib/api.js';
 
 const TITLES = { home: 'Letrava', search: 'Search', saved: 'Saved', profile: 'Profile' };
@@ -156,106 +157,131 @@ export const ScreenHeader = ({ title, onBack, right }) => (
 
 export const SearchScreen = ({ onOpenLetter, onOpenProfile }) => {
   const [q, setQ] = useState('');
-  const writers = [
-    { name: '@nightowl_p', bio: 'Letters about waiting and weather.', palette: 'violet' },
-    { name: '@calmlines', bio: 'Slow notes from a small town.', palette: 'amber' },
-    { name: '@rv_letters', bio: 'A quiet record of the ordinary.', palette: 'teal' },
-  ];
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [letters, setLetters] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const { data: topUsers } = useApi('/api/search/users');  // no query = top by followers
+
+  // Debounce input 350 ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // Run search when debounced query changes
+  useEffect(() => {
+    if (!debouncedQ.trim()) { setLetters([]); setUsers([]); return; }
+    setLoading(true);
+    Promise.all([
+      getJSON(`/api/search/letters?q=${encodeURIComponent(debouncedQ)}`),
+      getJSON(`/api/search/users?q=${encodeURIComponent(debouncedQ)}`),
+    ]).then(([l, u]) => { setLetters(l || []); setUsers(u || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [debouncedQ]);
+
+  const hasQuery = debouncedQ.trim().length > 0;
+
   return (
     <div>
-      <div style={{ padding: 16, borderBottom: '1px solid #F3F4F6' }}>
+      {/* Search input */}
+      <div style={{ padding: 16, borderBottom: '1px solid #F3F4F6', position: 'sticky', top: 0, background: '#fff', zIndex: 4 }}>
         <div style={{ position: 'relative' }}>
-          <span
-            style={{
-              position: 'absolute',
-              left: 14,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#9CA3AF',
-              display: 'inline-flex',
-            }}
-          >
+          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', display: 'inline-flex' }}>
             <Search size={18} strokeWidth={1.75} />
           </span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search letters and writers"
-            style={{
-              width: '100%',
-              padding: '12px 14px 12px 40px',
-              borderRadius: 12,
-              border: 'none',
-              background: '#F3F4F6',
-              fontSize: 15,
-              outline: 'none',
-              fontFamily: 'inherit',
-            }}
+            style={{ width: '100%', padding: '12px 14px 12px 40px', borderRadius: 12, border: 'none', background: '#F3F4F6', fontSize: 15, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
           />
         </div>
       </div>
-      <div
-        style={{
-          padding: '20px 16px 8px',
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: '#6B7280',
-        }}
-      >
-        Trending tags
+
+      {loading && <div style={{ padding: '20px 16px', color: '#9CA3AF', fontSize: 13 }}>Searching…</div>}
+
+      {/* Search results */}
+      {hasQuery && !loading && (
+        <>
+          {users.length > 0 && (
+            <>
+              <SectionLabel>Writers</SectionLabel>
+              {users.map((u) => <WriterRow key={u.id} user={u} onOpenProfile={onOpenProfile} />)}
+            </>
+          )}
+          {letters.length > 0 && (
+            <>
+              <SectionLabel>Letters</SectionLabel>
+              {letters.map((l) => (
+                <div key={l.id} onClick={() => onOpenLetter(l)} style={{ padding: '12px 16px', borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
+                  <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 16, fontWeight: 500, color: '#111827', marginBottom: 2 }}>{l.title}</div>
+                  <div style={{ fontSize: 12, color: '#6B7280', display: 'flex', gap: 8 }}>
+                    <span>{l.author.name}</span>·
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Heart size={10} strokeWidth={1.75} />{l.reactions}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><MessageCircle size={10} strokeWidth={1.75} />{l.comments}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          {users.length === 0 && letters.length === 0 && (
+            <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No results for "{debouncedQ}"</div>
+          )}
+        </>
+      )}
+
+      {/* Default state — no query */}
+      {!hasQuery && (
+        <>
+          <SectionLabel>Writers to follow</SectionLabel>
+          {(!topUsers || topUsers.length === 0) && (
+            <div style={{ padding: '12px 16px', color: '#9CA3AF', fontSize: 13 }}>No writers yet.</div>
+          )}
+          {topUsers && topUsers.map((u) => <WriterRow key={u.id} user={u} onOpenProfile={onOpenProfile} />)}
+        </>
+      )}
+    </div>
+  );
+};
+
+const SectionLabel = ({ children }) => (
+  <div style={{ padding: '16px 16px 8px', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6B7280' }}>
+    {children}
+  </div>
+);
+
+const WriterRow = ({ user, onOpenProfile }) => {
+  const [following, setFollowing] = useState(user.is_following);
+  const [busy, setBusy] = useState(false);
+  const name = user.username?.startsWith('@') ? user.username : `@${user.username}`;
+
+  const toggle = async (e) => {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (following) {
+        await delJSON(`/api/users/${user.id}/follow`);
+        setFollowing(false);
+      } else {
+        await postJSON(`/api/users/${user.id}/follow`, {});
+        setFollowing(true);
+      }
+    } catch { /* ignore */ } finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={() => onOpenProfile({ id: user.id, name, palette: user.palette })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #F9FAFB' }}>
+      <Avatar name={name} size={40} palette={user.palette} src={user.avatar} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{name}</div>
+        <div style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.bio || `${user.followers_count} followers`}</div>
       </div>
-      <div style={{ padding: '0 16px 20px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {['solitude', 'evenings', 'cities', 'change', 'memory', 'ordinary', 'hope', 'family', 'rain'].map((t) => (
-          <Tag key={t}>#{t}</Tag>
-        ))}
-      </div>
-      <div
-        style={{
-          padding: '12px 16px 8px',
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: '#6B7280',
-        }}
-      >
-        Writers to follow
-      </div>
-      {writers.map((w) => (
-        <div
-          key={w.name}
-          onClick={() => onOpenProfile(w)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 16px',
-            cursor: 'pointer',
-            borderBottom: '1px solid #F9FAFB',
-          }}
-        >
-          <Avatar name={w.name} size={40} palette={w.palette} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{w.name}</div>
-            <div
-              style={{
-                fontSize: 12,
-                color: '#6B7280',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {w.bio}
-            </div>
-          </div>
-          <Button variant="pillSec" size="sm" onClick={(e) => e.stopPropagation()}>
-            Follow
-          </Button>
-        </div>
-      ))}
+      <Button variant={following ? 'pillSec' : 'pill'} size="sm" onClick={toggle} disabled={busy}>
+        {following ? 'Following' : 'Follow'}
+      </Button>
     </div>
   );
 };

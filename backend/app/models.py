@@ -23,6 +23,7 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     palette: Mapped[str] = mapped_column(String(16), nullable=False, default="indigo")
     bio: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    avatar: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64 data URL
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

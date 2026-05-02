@@ -12,8 +12,8 @@ const inp = {
 };
 const lk = { color: '#4338CA', cursor: 'pointer', fontWeight: 500 };
 
-export const LoginModal = ({ onClose, onAuth }) => {
-  const [mode, setMode] = useState('signup');
+export const LoginModal = ({ onClose, onAuth, initialMode = 'signup' }) => {
+  const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -28,6 +28,7 @@ export const LoginModal = ({ onClose, onAuth }) => {
     try {
       if (mode === 'signin') {
         await authSignin({ email, password });
+        onAuth(false);
       } else {
         if (!username.trim()) { setError('Pick a username.'); setSubmitting(false); return; }
         await authSignup({
@@ -37,8 +38,8 @@ export const LoginModal = ({ onClose, onAuth }) => {
           palette,
           bio: bio.trim(),
         });
+        onAuth(true);
       }
-      onAuth();
     } catch (e) {
       const detail = e?.body?.detail;
       if (typeof detail === 'string') {

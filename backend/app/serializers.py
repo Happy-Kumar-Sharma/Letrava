@@ -44,7 +44,7 @@ def excerpt_from(body: str) -> str:
 
 
 def author_dict(u: User) -> dict:
-    return {"id": u.id, "name": u.username, "palette": u.palette}
+    return {"id": u.id, "name": u.username, "palette": u.palette, "avatar": u.avatar}
 
 
 def letter_to_dict(

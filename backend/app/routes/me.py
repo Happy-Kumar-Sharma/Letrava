@@ -1,4 +1,4 @@
-"""/api/me — current user profile."""
+"""/api/me — current user profile + edit."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -8,13 +8,31 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..db import get_db
 from ..models import Follow, Letter, User
-from ..schemas import UserOut, UserPublic
+from ..schemas import ProfileUpdate, UserOut, UserPublic
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
 
 @router.get("", response_model=UserOut)
 def get_me(user: User = Depends(get_current_user)) -> UserOut:
+    return user
+
+
+@router.patch("", response_model=UserOut)
+def update_me(
+    body: ProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    if body.palette is not None:
+        user.palette = body.palette
+    if body.bio is not None:
+        user.bio = body.bio.strip()
+    if body.avatar is not None:
+        # Empty string means "clear avatar"
+        user.avatar = body.avatar if body.avatar else None
+    db.commit()
+    db.refresh(user)
     return user
 
 
@@ -31,6 +49,7 @@ def get_my_profile(
         username=user.username,
         palette=user.palette,
         bio=user.bio,
+        avatar=user.avatar,
         letters_count=letters_count,
         followers_count=followers,
         following_count=following,

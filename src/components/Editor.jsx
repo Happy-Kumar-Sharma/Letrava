@@ -14,9 +14,9 @@ const MOODS = [
  * Editor — full-screen composer.
  * Calls onSubmit(newLetter) after successful publish so the shell can refresh.
  */
-export const Editor = ({ onClose, onSubmit }) => {
+export const Editor = ({ onClose, onSubmit, initialPrompt = null }) => {
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initialPrompt ? `Prompt: ${initialPrompt}\n\n` : '');
   const [tags, setTags] = useState(['solitude']);
   const [tagDraft, setTagDraft] = useState('');
   const [mood, setMood] = useState('hopeful');
