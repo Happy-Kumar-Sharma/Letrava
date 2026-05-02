@@ -1,11 +1,19 @@
 import React, { useRef, useState } from 'react';
-import { Bell, Camera, Heart, MessageCircle, X } from 'lucide-react';
-import { Avatar, Tag, Button } from './Shared.jsx';
+import { Bell, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { ScreenHeader } from './MobileChrome.jsx';
 import { useApi, postJSON, delJSON, patchJSON } from '../lib/api.js';
 
 const PALETTES = ['indigo', 'coral', 'teal', 'violet', 'amber'];
-const PROFILE_TABS = [{ key: 'letters', label: 'Letters' }, { key: 'about', label: 'About' }];
+
+// Cover gradient by palette — keeps profile cover band tied to the avatar color.
+const COVERS = {
+  indigo: 'linear-gradient(135deg, #EEF2FF 0%, #C7D2FE 100%)',
+  coral:  'linear-gradient(135deg, #FBE5DA 0%, #F5C9B6 100%)',
+  teal:   'linear-gradient(135deg, #E0F2EF 0%, #99F6E4 100%)',
+  violet: 'linear-gradient(135deg, #F1ECFF 0%, #DDD6FE 100%)',
+  amber:  'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+};
 
 // ---------------------------------------------------------------------------
 // Image compression via Canvas API
@@ -34,7 +42,7 @@ function compressImage(file, maxPx = 256, quality = 0.78) {
 }
 
 // ---------------------------------------------------------------------------
-// Edit profile form
+// Edit profile form (unchanged)
 // ---------------------------------------------------------------------------
 const EditProfileForm = ({ profile, onSaved, onCancel }) => {
   const [palette, setPalette] = useState(profile.palette || 'indigo');
@@ -78,7 +86,6 @@ const EditProfileForm = ({ profile, onSaved, onCancel }) => {
 
   return (
     <div style={{ padding: '16px' }}>
-      {/* Avatar upload */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <Avatar name={profile.username} size={72} palette={palette} src={avatar} />
@@ -110,7 +117,6 @@ const EditProfileForm = ({ profile, onSaved, onCancel }) => {
         </div>
       </div>
 
-      {/* Bio */}
       <div style={{ marginBottom: 14 }}>
         <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 4 }}>Bio</label>
         <textarea
@@ -124,7 +130,6 @@ const EditProfileForm = ({ profile, onSaved, onCancel }) => {
         <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2, textAlign: 'right' }}>{bio.length}/200</div>
       </div>
 
-      {/* Palette */}
       <div style={{ marginBottom: 18 }}>
         <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>Avatar colour</label>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -157,8 +162,13 @@ const EditProfileForm = ({ profile, onSaved, onCancel }) => {
 };
 
 // ---------------------------------------------------------------------------
-// Profile screen
+// Profile screen — upgraded with cover band, segmented tabs, polish
 // ---------------------------------------------------------------------------
+const PROFILE_TABS = [
+  { key: 'letters', label: 'Letters' },
+  { key: 'about',   label: 'About' },
+];
+
 export const Profile = ({ author, onOpenLetter, onBack, self }) => {
   const profilePath = self ? '/api/me/profile' : author?.id ? `/api/users/${author.id}` : null;
   const { data: profile, loading, error, refetch } = useApi(profilePath, [profilePath]);
@@ -194,7 +204,7 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
     return (
       <div>
         {!self && <ScreenHeader title="Profile" onBack={onBack} />}
-        <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+        <ProfileSkeleton />
       </div>
     );
   }
@@ -233,25 +243,75 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
     );
   }
 
+  const cover = COVERS[displayed.palette] || COVERS.indigo;
+  const joinDate = displayed.created_at ? formatJoinDate(displayed.created_at) : null;
+
   return (
     <div>
-      {!self && <ScreenHeader title="Profile" onBack={onBack} />}
+      {/* Cover band — gradient from palette, with floating back/more controls */}
+      <div style={{ height: 96, background: cover, position: 'relative' }}>
+        {!self && onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              position: 'absolute', left: 8, top: 8,
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.85)',
+              border: 'none', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+              color: '#111827',
+            }}
+            aria-label="Back"
+          >
+            <ArrowLeft size={18} strokeWidth={1.75} />
+          </button>
+        )}
+        <button
+          style={{
+            position: 'absolute', right: 8, top: 8,
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.85)',
+            border: 'none', cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            color: '#111827',
+          }}
+          aria-label="More"
+        >
+          <MoreHorizontal size={18} strokeWidth={1.75} />
+        </button>
+      </div>
 
-      <div style={{ padding: '20px 16px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-          <Avatar name={displayName} size={64} palette={displayed.palette} src={displayed.avatar} />
-          <div style={{ display: 'flex', gap: 16 }}>
-            <Stat n={displayed.letters_count} label="letters" />
-            <Stat n={followers} label="followers" />
-            <Stat n={displayed.following_count} label="following" />
-          </div>
+      {/* Avatar overlapping cover band */}
+      <div style={{ padding: '0 20px', marginTop: -36, position: 'relative' }}>
+        <div style={{ display: 'inline-block', borderRadius: '50%', border: '4px solid #fff', background: '#fff' }}>
+          <Avatar name={displayName} size={72} palette={displayed.palette} src={displayed.avatar} />
         </div>
-        <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 22, fontWeight: 500, color: '#111827', marginBottom: 4 }}>
+      </div>
+
+      {/* Identity & meta */}
+      <div style={{ padding: '12px 20px 8px' }}>
+        <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 24, fontWeight: 500, color: '#111827', lineHeight: 1.1 }}>
           {displayName}
         </div>
-        <p style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 14, lineHeight: 1.5, color: '#4B5563', margin: '0 0 14px' }}>
-          {displayed.bio || (self ? 'Add a short bio.' : ' ')}
-        </p>
+        {joinDate && (
+          <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Joined {joinDate}</div>
+        )}
+        {(displayed.bio || self) && (
+          <p style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 15, lineHeight: 1.55, color: '#374151', margin: '12px 0 14px' }}>
+            {displayed.bio || (self ? 'Add a short bio.' : ' ')}
+          </p>
+        )}
+
+        {/* Stat row */}
+        <div style={{ display: 'flex', gap: 24, marginBottom: 16 }}>
+          <Stat n={displayed.letters_count ?? 0} label="letters" />
+          <Stat n={followers} label="followers" />
+          <Stat n={displayed.following_count ?? 0} label="following" />
+        </div>
+
+        {/* CTA cluster */}
         <div style={{ display: 'flex', gap: 8 }}>
           {self ? (
             <Button variant="secondary" size="sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(true)}>
@@ -268,22 +328,32 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </Button>
-              <Button variant="secondary" size="sm" icon={Bell}>Notify</Button>
+              <button style={iconBtnSm} aria-label="Notify" title="Notify on new letters">
+                <Bell size={18} strokeWidth={1.75} />
+              </button>
+              <button style={iconBtnSm} aria-label="Share">
+                <Share2 size={18} strokeWidth={1.75} />
+              </button>
             </>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', borderTop: '1px solid #F3F4F6', borderBottom: '1px solid #F3F4F6' }}>
+      {/* Segmented tabs */}
+      <div style={{ display: 'flex', borderTop: '1px solid #F3F4F6', borderBottom: '1px solid #F3F4F6', marginTop: 18 }}>
         {PROFILE_TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flex: 1, background: 'transparent', border: 'none', cursor: 'pointer',
-            padding: '12px 8px', fontSize: 13, fontWeight: 600,
+            padding: '12px 8px', fontSize: 12, fontWeight: 600,
             color: tab === t.key ? '#111827' : '#9CA3AF',
-            borderBottom: tab === t.key ? '2px solid #6366F1' : '2px solid transparent',
+            borderBottom: tab === t.key ? '2px solid #111827' : '2px solid transparent',
             marginBottom: -1,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
             {t.label}
+            {t.key === 'letters' && displayed.letters_count != null && (
+              <span style={{ color: '#9CA3AF', fontWeight: 500 }}>· {displayed.letters_count}</span>
+            )}
           </button>
         ))}
       </div>
@@ -291,11 +361,15 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
       {tab === 'letters' && (
         <>
           {!letters && <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading letters…</div>}
-          {letters && letters.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No letters yet.</div>}
+          {letters && letters.length === 0 && (
+            <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+              {self ? 'You haven’t written a letter yet.' : `${displayName} hasn’t written a letter yet.`}
+            </div>
+          )}
           {letters && letters.map((l) => (
             <div key={l.id} onClick={() => onOpenLetter(l)} style={{ padding: 16, borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
               <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 17, fontWeight: 500, color: '#111827', lineHeight: 1.3, marginBottom: 4 }}>{l.title}</div>
-              <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 13, lineHeight: 1.5, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.excerpt}</div>
+              <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 13, lineHeight: 1.55, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.excerpt}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
                 <span>{l.age} ago</span>
                 <span>{l.read_time}</span>
@@ -308,7 +382,7 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
       )}
 
       {tab === 'about' && (
-        <div style={{ padding: 20, fontFamily: 'Fraunces, Georgia, serif', fontSize: 15, lineHeight: 1.6, color: '#374151' }}>
+        <div style={{ padding: 20, fontFamily: 'Fraunces, Georgia, serif', fontSize: 15, lineHeight: 1.65, color: '#374151' }}>
           {displayed.bio || (self ? 'You haven’t added a bio yet.' : `${displayName} has not added a bio.`)}
         </div>
       )}
@@ -317,8 +391,30 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
 };
 
 const Stat = ({ n, label }) => (
-  <div style={{ textAlign: 'center' }}>
-    <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>{n}</div>
-    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{label}</div>
+  <div>
+    <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', lineHeight: 1.1 }}>{n}</div>
+    <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{label}</div>
   </div>
 );
+
+const ProfileSkeleton = () => (
+  <div>
+    <div style={{ height: 96, background: '#F3F4F6' }} />
+    <div style={{ padding: '0 20px', marginTop: -36 }}>
+      <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#E5E7EB', border: '4px solid #fff' }} />
+    </div>
+    <div style={{ padding: '12px 20px' }}>
+      <div style={{ width: 160, height: 18, background: '#F3F4F6', borderRadius: 6, marginBottom: 8 }} />
+      <div style={{ width: 100, height: 10, background: '#F3F4F6', borderRadius: 4, marginBottom: 16 }} />
+      <div style={{ width: '90%', height: 12, background: '#F3F4F6', borderRadius: 4, marginBottom: 6 }} />
+      <div style={{ width: '70%', height: 12, background: '#F3F4F6', borderRadius: 4 }} />
+    </div>
+  </div>
+);
+
+function formatJoinDate(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  } catch { return null; }
+}
