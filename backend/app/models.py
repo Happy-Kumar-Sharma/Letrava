@@ -2,7 +2,8 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import (
-    String, Text, ForeignKey, DateTime, UniqueConstraint, CheckConstraint, Index, func, text
+    Boolean, String, Text, ForeignKey, DateTime,
+    CheckConstraint, Index, func, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,12 +19,31 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     username: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # nullable so the migration runs without a backfill; app layer enforces presence
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     palette: Mapped[str] = mapped_column(String(16), nullable=False, default="indigo")
     bio: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     letters: Mapped[list["Letter"]] = relationship(back_populates="author", cascade="all, delete-orphan")
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class RefreshToken(Base):
+    """One row per issued refresh token. token_hash = SHA-256(raw_token)."""
+    __tablename__ = "refresh_tokens"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
 
 
 class Letter(Base):

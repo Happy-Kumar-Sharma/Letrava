@@ -2,9 +2,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
-    SUPABASE_JWT_SECRET: str = ""
+    # Auth — JWT_SECRET is required; startup fails loudly if absent
+    JWT_SECRET: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    SECURE_COOKIES: bool = False  # set True in production (HTTPS only)
+
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
     CORS_ORIGINS: str = "http://localhost:5173"
     PORT: int = 8000

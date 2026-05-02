@@ -1,11 +1,16 @@
-"""FastAPI entrypoint — wires routes, CORS, and Supabase Auth bearer."""
+"""FastAPI entrypoint — wires routes, CORS, and custom JWT auth."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
-from .routes import comments, follows, letters, me, prompts, reactions, saves
+from .routes import auth_routes, comments, follows, letters, me, prompts, reactions, saves
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -18,6 +23,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "An unexpected error occurred."})
+
+    app.include_router(auth_routes.router)
     app.include_router(me.router)
     app.include_router(letters.router)
     app.include_router(reactions.router)

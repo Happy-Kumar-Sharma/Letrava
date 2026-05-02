@@ -1,12 +1,40 @@
+import re
 from datetime import datetime
 from typing import Literal, Optional
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 ReactionKind = Literal["like", "thoughtful", "relatable", "sad", "hopeful", "inspiring"]
 Palette = Literal["indigo", "coral", "teal", "violet", "amber"]
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,40}$")
+
+
+class SignupIn(BaseModel):
+    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
+    password: str = Field(..., min_length=8, max_length=128)
+    username: str
+    palette: Palette = "indigo"
+    bio: str = ""
+
+    @field_validator("username")
+    @classmethod
+    def username_valid(cls, v: str) -> str:
+        if not _USERNAME_RE.match(v):
+            raise ValueError("Username must be 3–40 characters: letters, digits, underscores only")
+        return v.lower()
+
+
+class SigninIn(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class AuthorOut(BaseModel):

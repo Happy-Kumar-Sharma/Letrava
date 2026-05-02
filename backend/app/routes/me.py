@@ -1,44 +1,16 @@
-"""/api/me — current user init + profile."""
+"""/api/me — current user profile."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import Principal, get_current_user, get_principal
+from ..auth import get_current_user
 from ..db import get_db
 from ..models import Follow, Letter, User
-from ..schemas import UserInit, UserOut, UserPublic
+from ..schemas import UserOut, UserPublic
 
 router = APIRouter(prefix="/api/me", tags=["me"])
-
-
-@router.post("/init", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def init_user(
-    body: UserInit,
-    p: Principal = Depends(get_principal),
-    db: Session = Depends(get_db),
-) -> UserOut:
-    """First call after a magic-link signup — creates the app row for this auth user."""
-    existing = db.get(User, p.sub)
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "User already initialized")
-    user = User(
-        id=p.sub,
-        email=p.email,
-        username=body.username.strip(),
-        palette=body.palette,
-        bio=body.bio or "",
-    )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Username already taken")
-    db.refresh(user)
-    return user
 
 
 @router.get("", response_model=UserOut)

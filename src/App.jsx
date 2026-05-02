@@ -7,35 +7,53 @@ import { Profile } from './components/Profile.jsx';
 import { Editor } from './components/Editor.jsx';
 import { LoginModal } from './components/LoginModal.jsx';
 import { ProfileGate } from './components/ProfileGate.jsx';
-import { supabase } from './lib/supabase.js';
+import { refreshAccessToken, setOnUnauthorized, authSignout } from './lib/api.js';
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
+  // Prevents flash of the unauthenticated screen while the initial refresh call is in flight.
+  const [authChecked, setAuthChecked] = useState(false);
   const [tab, setTab] = useState('home');
   const [activeLetter, setActiveLetter] = useState(null);
   const [activeAuthor, setActiveAuthor] = useState(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [view, setView] = useState('shell');
-  // Bumping `feedTick` forces re-mount of the feed (and its useApi) so a freshly
-  // published letter shows up immediately.
   const [feedTick, setFeedTick] = useState(0);
 
-  // Single source of truth for "logged in": Supabase session presence.
   useEffect(() => {
-    let cancelled = false;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!cancelled) setAuthed(!!session);
+    // If the refresh token cookie exists and is valid, this restores the session
+    // silently on every page load/reload without any user interaction.
+    setOnUnauthorized(() => {
+      setAuthed(false);
+      setView('shell');
+      setTab('home');
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthed(!!session);
-      if (session) setLoginOpen(false);
+
+    refreshAccessToken().then((token) => {
+      setAuthed(!!token);
+      setAuthChecked(true);
     });
-    return () => {
-      cancelled = true;
-      sub.subscription.unsubscribe();
-    };
   }, []);
+
+  // Don't render until we know auth state — avoids briefly showing the onboarding screen.
+  if (!authChecked) return null;
+
+  const handleAuth = () => {
+    setAuthed(true);
+    setLoginOpen(false);
+    setView('shell');
+    setTab('home');
+  };
+
+  const handleSignOut = async () => {
+    await authSignout();
+    setAuthed(false);
+    setView('shell');
+    setTab('home');
+    setActiveLetter(null);
+    setActiveAuthor(null);
+  };
 
   const openLetter = (l) => {
     if (!authed) { setLoginOpen(true); return; }
@@ -49,28 +67,19 @@ export default function App() {
     setView('profile');
   };
 
-  const handleAuth = () => {
-    setLoginOpen(false);
-    setView('shell');
-    setTab('home');
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setView('shell');
-    setTab('home');
-    setActiveLetter(null);
-    setActiveAuthor(null);
-  };
-
   const handlePublished = () => {
     setEditorOpen(false);
     setFeedTick((n) => n + 1);
     setTab('home');
   };
 
-  // Authed routing is wrapped in ProfileGate so first-time users see the
-  // username prompt before they hit any sample-less feed.
+  const handleTabChange = (next) => {
+    setTab(next);
+    setView('shell');
+    setActiveLetter(null);
+    setActiveAuthor(null);
+  };
+
   const authedScreen = (me) => {
     if (view === 'letter' && activeLetter) {
       return (
@@ -90,15 +99,9 @@ export default function App() {
         />
       );
     }
-    if (tab === 'home') {
-      return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} />;
-    }
-    if (tab === 'search') {
-      return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
-    }
-    if (tab === 'saved') {
-      return <SavedScreen onOpenLetter={openLetter} />;
-    }
+    if (tab === 'home') return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} />;
+    if (tab === 'search') return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
+    if (tab === 'saved') return <SavedScreen onOpenLetter={openLetter} />;
     if (tab === 'profile') {
       return (
         <Profile
@@ -115,11 +118,9 @@ export default function App() {
     <div className="ltv-shell-wrap">
       <div className="ltv-shell">
         {!authed && (
-          <>
-            <div className="ltv-screen">
-              <Onboarding onSignIn={() => setLoginOpen(true)} onOpenLetter={openLetter} />
-            </div>
-          </>
+          <div className="ltv-screen">
+            <Onboarding onSignIn={() => setLoginOpen(true)} onOpenLetter={openLetter} />
+          </div>
         )}
 
         {authed && (
@@ -130,9 +131,11 @@ export default function App() {
                   <TopBar tab={tab} onBell={() => {}} onSignOut={handleSignOut} />
                 )}
                 <div className="ltv-screen">{authedScreen(me)}</div>
-                {view === 'shell' && (
-                  <BottomNav tab={tab} onTab={setTab} onWrite={() => setEditorOpen(true)} />
-                )}
+                <BottomNav
+                  tab={view === 'shell' ? tab : null}
+                  onTab={handleTabChange}
+                  onWrite={() => setEditorOpen(true)}
+                />
                 {editorOpen && (
                   <Editor onClose={() => setEditorOpen(false)} onSubmit={handlePublished} />
                 )}
