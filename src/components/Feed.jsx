@@ -401,7 +401,7 @@ const FeedLetter = ({ letter, me, onChanged, onOpen, onOpenProfile, onDeleted, o
           <span>{saveCount}</span>
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); share({ title: letter.title, text: letter.excerpt, url: window.location.href }); }}
+          onClick={(e) => { e.stopPropagation(); share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${letter.id}` }); }}
           style={{ ...actionBtn, marginLeft: 'auto' }}
           aria-label="Share"
         >

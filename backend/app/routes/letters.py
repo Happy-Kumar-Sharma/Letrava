@@ -46,6 +46,7 @@ def list_letters(
     feed: Literal["trending", "latest", "following"] = Query("latest"),
     limit: int = Query(20, ge=1, le=50),
     author: Optional[UUID] = Query(None),
+    mood: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     viewer: Optional[User] = Depends(get_optional_user),
 ) -> list[dict]:
@@ -72,6 +73,8 @@ def list_letters(
 
     if author is not None:
         stmt = stmt.where(Letter.author_id == author)
+    if mood:
+        stmt = stmt.where(Letter.mood == mood)
 
     stmt = stmt.limit(limit)
     letters = db.scalars(stmt).all()

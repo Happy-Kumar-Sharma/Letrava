@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Bell, BellOff, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { ScreenHeader } from './MobileChrome.jsx';
-import { useApi, postJSON, delJSON, patchJSON } from '../lib/api.js';
+import { useApi, postJSON, delJSON, patchJSON, triggerGlobalRefresh } from '../lib/api.js';
 import { useShare } from '../hooks/useShare.js';
 
 const PALETTES = ['indigo', 'coral', 'teal', 'violet', 'amber'];
@@ -471,7 +471,7 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
               letter={l}
               canDelete={!!self}
               onOpen={() => onOpenLetter(l)}
-              onDeleted={refetch}
+              onDeleted={() => { triggerGlobalRefresh(); refetch(); }}
             />
           ))}
         </>

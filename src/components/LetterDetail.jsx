@@ -30,7 +30,7 @@ const REACTIONS = [
 ];
 
 
-export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, onDeleted, onEdit }) => {
+export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, onDeleted, onEdit, publicView = false, onSignIn }) => {
   const share = useShare();
   const { data: fresh, refetch } = useApi(`/api/letters/${seedLetter.id}`, [seedLetter.id]);
   const letter = fresh || seedLetter;
@@ -42,7 +42,7 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
   const [showMenu, setShowMenu]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
 
-  const isAuthor = me && letter.author && String(me.id) === String(letter.author.id);
+  const isAuthor = !publicView && me && letter.author && String(me.id) === String(letter.author.id);
 
   // Reading progress (0..1) — drives the thin bar at the top of the screen.
   const scrollRef = useRef(null);
@@ -72,6 +72,7 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
   }, [fresh]);
 
   const onReact = async (key) => {
+    if (publicView) { onSignIn?.('signup'); return; }
     if (busy) return;
     setBusy(true);
     const prev = reaction;
@@ -177,7 +178,7 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
             <button
               style={iconBtnSm}
               aria-label="Share"
-              onClick={() => share({ title: letter.title, text: letter.excerpt, url: window.location.href })}
+              onClick={() => share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${letter.id}` })}
             >
               <Share2 size={20} strokeWidth={1.75} />
             </button>
@@ -291,14 +292,21 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
             {typeof letter.reactions === 'number' && ` · ${letter.reactions} reactions`}
           </div>
         </div>
-        <Button
-          variant={following ? 'pillSec' : 'pill'}
-          size="sm"
-          onClick={onToggleFollow}
-          disabled={busy}
-        >
-          {following ? 'Following' : 'Follow'}
-        </Button>
+        {!publicView && (
+          <Button
+            variant={following ? 'pillSec' : 'pill'}
+            size="sm"
+            onClick={onToggleFollow}
+            disabled={busy}
+          >
+            {following ? 'Following' : 'Follow'}
+          </Button>
+        )}
+        {publicView && (
+          <Button variant="pill" size="sm" onClick={() => onSignIn?.('signup')}>
+            Follow
+          </Button>
+        )}
       </div>
 
       {/* Body */}
@@ -363,10 +371,52 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
         )}
       </div>
 
-      <CommentsSection letterId={letter.id} me={me} onOpenProfile={onOpenProfile} />
+      {publicView ? (
+        <PublicViewCTA onSignIn={onSignIn} />
+      ) : (
+        <CommentsSection letterId={letter.id} me={me} onOpenProfile={onOpenProfile} />
+      )}
     </div>
   );
 };
+
+// ---- Public view CTA (replaces comments for unauthenticated visitors) -------
+const PublicViewCTA = ({ onSignIn }) => (
+  <div
+    style={{
+      margin: '0 24px 32px',
+      padding: '28px 24px',
+      borderRadius: 16,
+      background: 'linear-gradient(180deg, #FFF7F2 0%, #FFFBF7 100%)',
+      border: '1px solid #F5C9B6',
+      textAlign: 'center',
+    }}
+  >
+    <div
+      style={{
+        fontFamily: 'Fraunces, Georgia, serif',
+        fontSize: 20,
+        fontWeight: 500,
+        color: '#111827',
+        marginBottom: 8,
+        lineHeight: 1.2,
+      }}
+    >
+      Join the conversation
+    </div>
+    <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 20px', lineHeight: 1.55 }}>
+      Register or sign in to read comments, react, and write your own letters.
+    </p>
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+      <Button variant="primary" size="sm" onClick={() => onSignIn?.('signup')}>
+        Create account
+      </Button>
+      <Button variant="secondary" size="sm" onClick={() => onSignIn?.('login')}>
+        Sign in
+      </Button>
+    </div>
+  </div>
+);
 
 // ---- Reaction distribution bar ----------------------------------------------
 const ReactionBar = ({ breakdown, total }) => {

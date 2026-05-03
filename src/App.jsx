@@ -9,7 +9,27 @@ import { LoginModal } from './components/LoginModal.jsx';
 import { ProfileGate } from './components/ProfileGate.jsx';
 import { NotificationsScreen } from './components/NotificationsScreen.jsx';
 import { DesktopShell } from './components/Desktop.jsx';
-import { getJSON, setOnUnauthorized, authSignout, triggerGlobalRefresh } from './lib/api.js';
+import { getJSON, setOnUnauthorized, authSignout, triggerGlobalRefresh, useApi } from './lib/api.js';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Parse /letter/:id from a pathname, returns integer id or null. */
+function parseLetterId(pathname) {
+  const m = pathname.match(/^\/letter\/(\d+)(?:\/.*)?$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Push /letter/:id into browser history. */
+function pushLetterUrl(id) {
+  window.history.pushState({ letterId: id }, '', `/letter/${id}`);
+}
+
+/** Reset URL back to the app root. */
+function pushRootUrl() {
+  window.history.pushState({}, '', '/');
+}
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -74,27 +94,56 @@ const PullIndicator = ({ progress, refreshing }) => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Loader for a letter by ID (used by both authed and public paths)
+// ---------------------------------------------------------------------------
+const LetterLoader = ({ letterId, children }) => {
+  const { data: letter, loading } = useApi(
+    letterId ? `/api/letters/${letterId}` : null,
+    [letterId]
+  );
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>
+        Loading…
+      </div>
+    );
+  }
+  if (!letter) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>
+        Letter not found.
+      </div>
+    );
+  }
+  return children(letter);
+};
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 export default function App() {
-  const [authed, setAuthed]         = useState(false);
+  const [authed, setAuthed]           = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [tab, setTab]               = useState('home');
+  const [tab, setTab]                 = useState('home');
   const [activeLetter, setActiveLetter] = useState(null);
   const [activeAuthor, setActiveAuthor] = useState(null);
-  const [loginOpen, setLoginOpen]   = useState(false);
-  const [loginMode, setLoginMode]   = useState('signup');
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [loginOpen, setLoginOpen]     = useState(false);
+  const [loginMode, setLoginMode]     = useState('signup');
+  const [editorOpen, setEditorOpen]   = useState(false);
   const [editorPrompt, setEditorPrompt] = useState(null);
   const [editorLetter, setEditorLetter] = useState(null);
-  const [feedTick, setFeedTick]     = useState(0);
-  const [toast, setToast]           = useState(null);
-  const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 1024);
-  const [view, setView]             = useState('shell');
+  const [toast, setToast]             = useState(null);
+  const [isDesktop, setIsDesktop]     = useState(() => window.innerWidth >= 1024);
+  const [view, setView]               = useState('shell');
+  // URL-driven letter ID (set from pathname on load / popstate)
+  const [urlLetterId, setUrlLetterId] = useState(() => parseLetterId(window.location.pathname));
   const toastTimer = useRef(null);
 
   // Pull-to-refresh state
   const screenRef    = useRef(null);
   const ptrTouch     = useRef({ y0: 0, progress: 0 });
-  const [pullProgress, setPullProgress]   = useState(0);
+  const [pullProgress, setPullProgress]     = useState(0);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const PTR_THRESHOLD = 72;
 
@@ -104,48 +153,62 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
 
-  // Responsive desktop detection
+  // ── Responsive desktop detection ──────────────────────────────────────────
   useEffect(() => {
     const onResize = () => setIsDesktop(window.innerWidth >= 1024);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Global toast (fired by useShare or other hooks)
+  // ── Global toast (fired by useShare etc.) ─────────────────────────────────
   useEffect(() => {
     const handler = (e) => showToast(e.detail.message, '#16A34A');
     window.addEventListener('letrava:toast', handler);
     return () => window.removeEventListener('letrava:toast', handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auth init + unauthorized callback
+  // ── Auth init ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Only silently clear auth state — never force-open the login modal.
-    // The user will see the unauthenticated UI and can sign in whenever they choose.
-    // Forced logouts were causing unexpected session drops; the access token is now
-    // 24 h and the refresh token 1 year, so this callback fires only on genuine
-    // multi-day inactivity or an explicit server-side session revocation.
     setOnUnauthorized(() => {
       setAuthed(false);
       setView('shell');
       setTab('home');
     });
-    // Use the access_token cookie (Path=/api, valid 15 min) to check auth on startup.
-    // If it's still valid → authed immediately, no cookie rotation needed.
-    // If it's expired  → api() auto-retries after calling POST /api/auth/refresh,
-    //                    so the refresh_token cookie is only sent when truly needed.
-    // If both fail     → _onUnauthorized fires, then .catch sets authChecked=true.
     getJSON('/api/auth/me')
       .then(() => { setAuthed(true);  setAuthChecked(true); })
       .catch(() => { setAuthed(false); setAuthChecked(true); });
+
+    // Open shared letter on startup if URL contains /letter/:id
+    const id = parseLetterId(window.location.pathname);
+    if (id) {
+      setUrlLetterId(id);
+      setView('letter');
+    }
+
     return () => clearTimeout(toastTimer.current);
   }, []);
 
-  // Pull-to-refresh gesture (mobile only — no-op on desktop)
+  // ── Browser back / forward ────────────────────────────────────────────────
+  useEffect(() => {
+    const onPop = () => {
+      const id = parseLetterId(window.location.pathname);
+      if (id) {
+        setUrlLetterId(id);
+        setView('letter');
+      } else {
+        setUrlLetterId(null);
+        setActiveLetter(null);
+        setView('shell');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // ── Pull-to-refresh ───────────────────────────────────────────────────────
   const doRefresh = useCallback(() => {
     setPullRefreshing(true);
     triggerGlobalRefresh();
-    setFeedTick((n) => n + 1);
     setTimeout(() => setPullRefreshing(false), 1200);
   }, []);
 
@@ -184,6 +247,7 @@ export default function App() {
 
   if (!authChecked) return null;
 
+  // ── Auth helpers ──────────────────────────────────────────────────────────
   const openLogin = (mode = 'signup') => {
     setLoginMode(mode);
     setLoginOpen(true);
@@ -192,14 +256,16 @@ export default function App() {
   const handleAuth = (isNew = false) => {
     setAuthed(true);
     setLoginOpen(false);
-    setView('shell');
-    setTab('home');
+    // If user just signed in while on a shared letter, keep viewing it
+    if (view !== 'letter') {
+      setView('shell');
+      setTab('home');
+    }
     if (isNew) showToast('✓ Account created — you\'re logged in!', '#16A34A');
   };
 
   const handleSignOut = async () => {
     await authSignout();
-    // Clear all session state
     setAuthed(false);
     setView('shell');
     setTab('home');
@@ -207,17 +273,27 @@ export default function App() {
     setActiveAuthor(null);
     setEditorOpen(false);
     setEditorPrompt(null);
-    setFeedTick(0);
     setToast(null);
-    // Redirect to sign-in
+    // Keep urlLetterId so logged-out public view still works
     setLoginMode('signin');
     setLoginOpen(true);
+    pushRootUrl();
   };
 
+  // ── Navigation ────────────────────────────────────────────────────────────
   const openLetter = (l) => {
-    if (!authed) { openLogin('signup'); return; }
+    pushLetterUrl(l.id);
     setActiveLetter(l);
+    setUrlLetterId(null); // use activeLetter object, not id-only lookup
     setView('letter');
+    // Unauthenticated users can still view — publicView handled in render
+  };
+
+  const goBackFromLetter = () => {
+    pushRootUrl();
+    setActiveLetter(null);
+    setUrlLetterId(null);
+    setView('shell');
   };
 
   const openProfile = (a) => {
@@ -232,17 +308,22 @@ export default function App() {
     setEditorOpen(true);
   };
 
+  // After create/edit: refetch feeds without remounting them
   const handlePublished = (result) => {
     setEditorOpen(false);
     setEditorPrompt(null);
-    setEditorLetter(null);
-    setFeedTick((n) => n + 1);
-    // After editing, jump back to the updated letter detail
+    triggerGlobalRefresh();
     if (result?.id && editorLetter) {
+      // Edit: jump back to the updated letter
       setActiveLetter(result);
+      setEditorLetter(null);
+      pushLetterUrl(result.id);
       setView('letter');
     } else {
+      setEditorLetter(null);
       setTab('home');
+      setView('shell');
+      pushRootUrl();
     }
   };
 
@@ -251,22 +332,48 @@ export default function App() {
     setView('shell');
     setActiveLetter(null);
     setActiveAuthor(null);
+    if (next !== 'letter') pushRootUrl();
   };
 
+  // ── Authed screen resolver ─────────────────────────────────────────────────
   const authedScreen = (me) => {
     if (view === 'notifications') {
       return <NotificationsScreen onBack={() => setView('shell')} />;
     }
-    if (view === 'letter' && activeLetter) {
-      return <LetterDetail
-        letter={activeLetter}
-        onBack={() => setView('shell')}
-        onOpenProfile={openProfile}
-        me={me}
-        onDeleted={() => { setFeedTick((n) => n + 1); setView('shell'); }}
-        onEdit={(l) => openEditor(null, l)}
-      />;
+
+    if (view === 'letter') {
+      // Have a full letter object already (from feed click)
+      if (activeLetter) {
+        return (
+          <LetterDetail
+            letter={activeLetter}
+            onBack={goBackFromLetter}
+            onOpenProfile={openProfile}
+            me={me}
+            onDeleted={() => { triggerGlobalRefresh(); goBackFromLetter(); }}
+            onEdit={(l) => openEditor(null, l)}
+          />
+        );
+      }
+      // Only have an ID (came via shared URL) — load by ID
+      if (urlLetterId) {
+        return (
+          <LetterLoader letterId={urlLetterId}>
+            {(letter) => (
+              <LetterDetail
+                letter={letter}
+                onBack={goBackFromLetter}
+                onOpenProfile={openProfile}
+                me={me}
+                onDeleted={() => { triggerGlobalRefresh(); goBackFromLetter(); }}
+                onEdit={(l) => openEditor(null, l)}
+              />
+            )}
+          </LetterLoader>
+        );
+      }
     }
+
     if (view === 'profile') {
       return (
         <Profile
@@ -276,14 +383,30 @@ export default function App() {
         />
       );
     }
-    if (tab === 'home')    return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} onWrite={openEditor} me={me} onLetterDeleted={() => setFeedTick((n) => n + 1)} onEditLetter={(l) => openEditor(null, l)} />;
+
+    if (tab === 'home') return (
+      <Feed
+        onOpenLetter={openLetter}
+        onOpenProfile={openProfile}
+        onWrite={openEditor}
+        me={me}
+        onLetterDeleted={triggerGlobalRefresh}
+        onEditLetter={(l) => openEditor(null, l)}
+      />
+    );
     if (tab === 'search')  return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
     if (tab === 'saved')   return <SavedScreen onOpenLetter={openLetter} />;
-    if (tab === 'profile') return <Profile author={{ id: me.id, name: `@${me.username}`, palette: me.palette }} self onOpenLetter={openLetter} />;
+    if (tab === 'profile') return (
+      <Profile
+        author={{ id: me.id, name: `@${me.username}`, palette: me.palette }}
+        self
+        onOpenLetter={openLetter}
+      />
+    );
     return null;
   };
 
-  // Desktop layout — authenticated only
+  // ── Desktop layout ─────────────────────────────────────────────────────────
   if (isDesktop && authed) {
     return (
       <ProfileGate>
@@ -292,17 +415,34 @@ export default function App() {
     );
   }
 
+  // ── Public (unauthenticated) letter view ──────────────────────────────────
+  // Shown when someone opens a shared /letter/:id link without being logged in.
+  const showPublicLetter = !authed && (view === 'letter' || urlLetterId) && urlLetterId;
+
   return (
     <div className="ltv-shell-wrap">
       {toast && <Toast message={toast.message} color={toast.color} />}
       <div className="ltv-shell">
-        {!authed && (
+        {showPublicLetter ? (
+          <div className="ltv-screen">
+            <LetterLoader letterId={urlLetterId}>
+              {(letter) => (
+                <LetterDetail
+                  letter={letter}
+                  onBack={() => { pushRootUrl(); setUrlLetterId(null); setView('shell'); }}
+                  onOpenProfile={() => openLogin('signup')}
+                  me={null}
+                  publicView
+                  onSignIn={openLogin}
+                />
+              )}
+            </LetterLoader>
+          </div>
+        ) : !authed ? (
           <div className="ltv-screen">
             <Onboarding onSignIn={openLogin} onOpenLetter={openLetter} />
           </div>
-        )}
-
-        {authed && (
+        ) : (
           <ProfileGate>
             {(me) => (
               <>
