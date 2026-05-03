@@ -187,3 +187,79 @@ export const iconBtn = {
 };
 
 export const iconBtnSm = { ...iconBtn, width: 36, height: 36 };
+
+// ---------------------------------------------------------------------------
+// Inline + block markdown renderer (shared between mobile LetterDetail and
+// desktop ReaderPane so formatting is consistent everywhere)
+// ---------------------------------------------------------------------------
+export function parseInline(text) {
+  return text.split(/(\*\*[^*\n]+?\*\*|_[^_\n]+?_)/g).map((seg, i) => {
+    if (seg.startsWith('**') && seg.endsWith('**')) return <strong key={i}>{seg.slice(2, -2)}</strong>;
+    if (seg.startsWith('_')  && seg.endsWith('_'))  return <em key={i}>{seg.slice(1, -1)}</em>;
+    return seg;
+  });
+}
+
+export function BodyRenderer({ body, dropCapColor = '#E07856' }) {
+  const blocks = (body || '').split('\n\n');
+  const elements = [];
+  let firstRendered = false;
+
+  blocks.forEach((block, bi) => {
+    if (!block.trim()) return;
+    const lines = block.split('\n');
+
+    // Pure bullet-list block (every line starts with "- ")
+    if (lines.every(l => l.startsWith('- '))) {
+      elements.push(
+        <ul key={bi} style={{ margin: '0 0 18px', paddingLeft: 22 }}>
+          {lines.map((l, i) => (
+            <li key={i} style={{ marginBottom: 4 }}>{parseInline(l.slice(2))}</li>
+          ))}
+        </ul>
+      );
+      return;
+    }
+
+    lines.forEach((line, li) => {
+      const key = `${bi}-${li}`;
+      if (line.startsWith('## ')) {
+        elements.push(
+          <div key={key} style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 21, fontWeight: 500, color: '#111827', margin: '26px 0 8px', lineHeight: 1.2 }}>
+            {parseInline(line.slice(3))}
+          </div>
+        );
+      } else if (line.startsWith('> ')) {
+        elements.push(
+          <blockquote key={key} style={{ borderLeft: '3px solid #E07856', paddingLeft: 16, margin: '0 0 18px', color: '#4B5563', fontStyle: 'italic' }}>
+            {parseInline(line.slice(2))}
+          </blockquote>
+        );
+      } else if (line.startsWith('- ')) {
+        elements.push(
+          <div key={key} style={{ paddingLeft: 18, marginBottom: 6 }}>
+            <span style={{ color: '#E07856', marginRight: 6 }}>•</span>
+            {parseInline(line.slice(2))}
+          </div>
+        );
+      } else if (!firstRendered) {
+        // Drop-cap on the very first non-block line
+        firstRendered = true;
+        const first = line.charAt(0);
+        const rest  = line.slice(1);
+        elements.push(
+          <p key={key} style={{ margin: '0 0 18px' }}>
+            <span style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 56, lineHeight: 0.8, float: 'left', color: dropCapColor, marginRight: 8, marginTop: 6, fontWeight: 500 }}>
+              {first}
+            </span>
+            {parseInline(rest)}
+          </p>
+        );
+      } else {
+        elements.push(<p key={key} style={{ margin: '0 0 18px' }}>{parseInline(line)}</p>);
+      }
+    });
+  });
+
+  return <>{elements}</>;
+}

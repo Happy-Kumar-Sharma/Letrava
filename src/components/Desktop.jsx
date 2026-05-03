@@ -29,7 +29,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useShare } from '../hooks/useShare.js';
-import { Avatar, Tag, Button, Logo } from './Shared.jsx';
+import { Avatar, Tag, Button, Logo, BodyRenderer } from './Shared.jsx';
 import { Editor } from './Editor.jsx';
 import { Profile } from './Profile.jsx';
 import { CommentsSection } from './CommentsSection.jsx';
@@ -300,7 +300,7 @@ const FeedColumn = ({ activeId, onOpen, route = 'discover', feed = 'trending', o
 // ---------------------------------------------------------------------------
 // Reader pane (inspector)
 // ---------------------------------------------------------------------------
-const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted }) => {
+const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted, onEdit }) => {
   const [reaction, setReaction]     = useState(letter?.my_reaction || null);
   const [saved, setSaved]           = useState(!!letter?.saved);
   const [following, setFollowing]   = useState(false);
@@ -362,11 +362,6 @@ const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted }) => {
     );
   }
 
-  const paragraphs = (full?.body || '').split('\n\n');
-  const [firstP, ...restP] = paragraphs;
-  const firstChar = (firstP || '').charAt(0);
-  const firstRest = (firstP || '').slice(1);
-
   return (
     <main style={{ background: '#fff', overflowY: 'auto', position: 'relative' }} className="ltv-desktop-col">
       <div style={{ maxWidth: 660, margin: '0 auto', padding: '40px 56px 80px' }}>
@@ -410,12 +405,21 @@ const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted }) => {
               </button>
               {showMenu && (
                 <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: '#fff', border: '1px solid ' + C.line2, borderRadius: 10, boxShadow: '0 4px 16px rgba(17,24,39,0.10)', minWidth: 160, overflow: 'hidden' }}>
+                  {/* Edit */}
+                  <button
+                    onClick={() => { setShowMenu(false); onEdit?.(full); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', fontFamily: C.sans, textAlign: 'left' }}
+                  >
+                    <Pencil size={14} strokeWidth={1.75} />
+                    Edit letter
+                  </button>
+                  <div style={{ height: 1, background: '#F3F4F6' }} />
+                  {/* Delete */}
                   {!confirmDel ? (
                     <button
                       onClick={() => setConfirmDel(true)}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#EF4444', fontFamily: C.sans, textAlign: 'left' }}
                     >
-                      <Pencil size={14} strokeWidth={1.75} style={{ display: 'none' }} />
                       <Trash2 size={14} strokeWidth={1.75} />
                       Delete letter
                     </button>
@@ -447,15 +451,7 @@ const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted }) => {
         </div>
 
         <article style={{ fontFamily: C.serif, fontSize: 19, lineHeight: 1.75, color: C.ink2, marginBottom: 24 }}>
-          {firstP && (
-            <p style={{ margin: '0 0 22px' }}>
-              <span style={{ fontFamily: C.serif, fontSize: 64, lineHeight: 0.8, float: 'left', color: C.quill, marginRight: 10, marginTop: 8, fontWeight: 500 }}>
-                {firstChar}
-              </span>
-              {firstRest}
-            </p>
-          )}
-          {restP.map((p, i) => <p key={i} style={{ margin: '0 0 22px' }}>{p}</p>)}
+          <BodyRenderer body={full.body} dropCapColor={C.quill} />
         </article>
 
         {full.tags && full.tags.length > 0 && (
@@ -747,10 +743,10 @@ const PaletteSection = ({ children }) => (
 // ---------------------------------------------------------------------------
 // Desktop editor modal (wraps the existing Editor component)
 // ---------------------------------------------------------------------------
-const DesktopEditorModal = ({ onClose, onSubmit, initialPrompt }) => (
+const DesktopEditorModal = ({ onClose, onSubmit, initialPrompt = null, initialLetter = null }) => (
   <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 40 }}>
     <div style={{ width: '100%', maxWidth: 880, height: '100%', maxHeight: 720, borderRadius: 16, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,0.30)', position: 'relative' }}>
-      <Editor onClose={onClose} onSubmit={onSubmit} initialPrompt={initialPrompt} />
+      <Editor onClose={onClose} onSubmit={onSubmit} initialPrompt={initialPrompt} initialLetter={initialLetter} />
     </div>
   </div>
 );
@@ -763,6 +759,7 @@ export const DesktopShell = ({ me, onSignOut }) => {
   const [activeLetter, setActiveLetter] = useState(null);
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorLetter, setEditorLetter] = useState(null);
   const [feedTab, setFeedTab] = useState('trending');
   const [profileTarget, setProfileTarget] = useState(null);
 
@@ -827,7 +824,13 @@ export const DesktopShell = ({ me, onSignOut }) => {
               onFeedChange={setFeedTab}
               onOpenProfile={openProfile}
             />
-            <ReaderPane letter={activeLetter} me={me} onOpenProfile={openProfile} onLetterDeleted={() => setActiveLetter(null)} />
+            <ReaderPane
+              letter={activeLetter}
+              me={me}
+              onOpenProfile={openProfile}
+              onLetterDeleted={() => setActiveLetter(null)}
+              onEdit={(l) => { setEditorLetter(l); setEditorOpen(true); }}
+            />
           </>
         )}
 
@@ -850,8 +853,18 @@ export const DesktopShell = ({ me, onSignOut }) => {
 
       {editorOpen && (
         <DesktopEditorModal
-          onClose={() => setEditorOpen(false)}
-          onSubmit={() => { setEditorOpen(false); setRoute('discover'); }}
+          onClose={() => { setEditorOpen(false); setEditorLetter(null); }}
+          onSubmit={(result) => {
+            setEditorOpen(false);
+            setEditorLetter(null);
+            if (result?.id) {
+              setActiveLetter(result);
+              setRoute('discover');
+            } else {
+              setRoute('discover');
+            }
+          }}
+          initialLetter={editorLetter}
         />
       )}
 

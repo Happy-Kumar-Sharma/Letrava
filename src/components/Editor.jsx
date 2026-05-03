@@ -29,22 +29,35 @@ function applyInline(ta, prefix, suffix, setBody) {
   });
 }
 
-/** Toggle a line prefix (## , > , - ) on the line containing the cursor. */
+/** Toggle a line prefix (## , > , - ) on the line containing the cursor.
+ *  If the cursor is not at the start of a line, a newline is prepended so
+ *  the block marker always starts on its own line. */
 function applyBlock(ta, prefix, setBody) {
   const { selectionStart: pos, value } = ta;
   const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
   const lineEnd   = value.indexOf('\n', pos);
   const end = lineEnd === -1 ? value.length : lineEnd;
   const line = value.slice(lineStart, end);
-  const next = line.startsWith(prefix)
-    ? value.slice(0, lineStart) + line.slice(prefix.length) + value.slice(end)
-    : value.slice(0, lineStart) + prefix + line + value.slice(end);
-  setBody(next);
-  requestAnimationFrame(() => {
-    ta.focus();
-    const delta = line.startsWith(prefix) ? -prefix.length : prefix.length;
-    ta.setSelectionRange(pos + delta, pos + delta);
-  });
+
+  if (line.startsWith(prefix)) {
+    // Toggle OFF — strip the prefix
+    const next = value.slice(0, lineStart) + line.slice(prefix.length) + value.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(pos - prefix.length, pos - prefix.length);
+    });
+  } else {
+    // Toggle ON — prepend a newline if there is already text before this line
+    const needsNewline = lineStart > 0 && value[lineStart - 1] !== '\n';
+    const insertion = (needsNewline ? '\n' : '') + prefix;
+    const next = value.slice(0, lineStart) + insertion + line + value.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(pos + insertion.length, pos + insertion.length);
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
