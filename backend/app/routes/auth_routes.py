@@ -1,30 +1,40 @@
-"""POST /api/auth/{signup,signin,refresh,signout}
+"""POST /api/auth/{signup,signin,refresh,signout}  GET /api/auth/me
 
-Cookie spec
------------
-Name     : refresh_token
-HttpOnly : True   — JS cannot read (XSS barrier)
-Secure   : settings.SECURE_COOKIES (False in dev, True in prod over HTTPS)
-SameSite : Lax    — CSRF protection for state-changing requests
-Path     : /api/auth/refresh — cookie only sent on refresh calls, not all requests
+Cookie spec — refresh_token
+---------------------------
+HttpOnly : True
+Secure   : settings.SECURE_COOKIES (False in dev, True in prod)
+SameSite : Lax
+Path     : /api/auth/refresh
 Max-Age  : REFRESH_TOKEN_EXPIRE_DAYS * 86400
 
-Rate limiting (add before go-live)
------------------------------------
-All endpoints need per-IP rate limits. Recommended: slowapi.
-signup  → 5/hour, signin → 10/min (lockout after 5 failures), refresh → 60/min.
+Cookie spec — access_token  (NEW)
+----------------------------------
+HttpOnly : True  — JS cannot read; no XSS risk
+Secure   : settings.SECURE_COOKIES
+SameSite : Lax
+Path     : /api  — sent on every API call automatically
+Max-Age  : ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+The frontend no longer sends an Authorization header; the browser sends the
+access_token cookie on every /api/* fetch (credentials: "include").
+Authorization: Bearer is still accepted as a fallback for non-browser clients.
 """
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import (
     _sha256,
+    _bearer,
+    _resolve_token,
+    _decode_access_token,
     create_access_token,
     create_refresh_token,
     get_refresh_token_from_cookie,
@@ -40,29 +50,73 @@ from ..schemas import SigninIn, SignupIn, TokenResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-_COOKIE_NAME = "refresh_token"
-_COOKIE_PATH = "/api/auth/refresh"
-_COOKIE_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86_400
+_REFRESH_COOKIE     = "refresh_token"
+_REFRESH_COOKIE_PATH = "/api/auth/refresh"
+_REFRESH_MAX_AGE    = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86_400
 
-# Dummy hash used in constant-time signin to prevent timing-based user enumeration.
-# It is intentionally invalid — verify_password will always return False for it.
+_ACCESS_COOKIE      = "access_token"
+_ACCESS_COOKIE_PATH = "/api"
+_ACCESS_MAX_AGE     = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
 _DUMMY_HASH = "$2b$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
 
 
 def _set_refresh_cookie(response: Response, raw_token: str) -> None:
     response.set_cookie(
-        key=_COOKIE_NAME,
+        key=_REFRESH_COOKIE,
         value=raw_token,
         httponly=True,
         secure=settings.SECURE_COOKIES,
         samesite="lax",
-        path=_COOKIE_PATH,
-        max_age=_COOKIE_MAX_AGE,
+        path=_REFRESH_COOKIE_PATH,
+        max_age=_REFRESH_MAX_AGE,
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(key=_COOKIE_NAME, path=_COOKIE_PATH)
+    response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
+
+
+def _set_access_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=_ACCESS_COOKIE,
+        value=token,
+        httponly=True,
+        secure=settings.SECURE_COOKIES,
+        samesite="lax",
+        path=_ACCESS_COOKIE_PATH,
+        max_age=_ACCESS_MAX_AGE,
+    )
+
+
+def _clear_access_cookie(response: Response) -> None:
+    response.delete_cookie(key=_ACCESS_COOKIE, path=_ACCESS_COOKIE_PATH)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/me  — lightweight auth check
+# ---------------------------------------------------------------------------
+
+@router.get("/me")
+def check_auth(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Returns minimal user info when authenticated; 401 otherwise.
+    Used by the frontend on startup to determine login state."""
+    import uuid as _uuid
+    token = _resolve_token(request, creds)
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    payload = _decode_access_token(token)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    user = db.get(User, _uuid.UUID(sub))
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+    return {"id": str(user.id), "username": user.username, "palette": user.palette, "avatar": user.avatar}
 
 
 # ---------------------------------------------------------------------------
@@ -71,12 +125,6 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def signup(body: SignupIn, response: Response, db: Session = Depends(get_db)) -> dict:
-    """Create account and issue tokens in one request.
-
-    Returns the same ambiguous 409 for duplicate email OR username to prevent
-    email enumeration (attacker cannot tell which field conflicted).
-    """
-    # Check email first (cheaper than a flush + rollback)
     if db.scalar(select(User).where(User.email == body.email.lower().strip())):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email or username already taken")
 
@@ -90,15 +138,16 @@ def signup(body: SignupIn, response: Response, db: Session = Depends(get_db)) ->
     )
     db.add(user)
     try:
-        db.flush()  # fires uniqueness check on username before commit
+        db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Email or username already taken")
 
-    raw_refresh = create_refresh_token(db, user.id)  # commits
+    raw_refresh = create_refresh_token(db, user.id)
     access_token = create_access_token(user.id, user.email)
 
     _set_refresh_cookie(response, raw_refresh)
+    _set_access_cookie(response, access_token)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -110,7 +159,6 @@ def signup(body: SignupIn, response: Response, db: Session = Depends(get_db)) ->
 def signin(body: SigninIn, response: Response, db: Session = Depends(get_db)) -> dict:
     user = db.scalar(select(User).where(User.email == body.email.lower().strip()))
 
-    # Always run bcrypt — prevents timing-based user enumeration
     stored_hash = (user.password_hash if user and user.password_hash else _DUMMY_HASH)
     password_ok = verify_password(body.password, stored_hash)
 
@@ -121,6 +169,7 @@ def signin(body: SigninIn, response: Response, db: Session = Depends(get_db)) ->
     access_token = create_access_token(user.id, user.email)
 
     _set_refresh_cookie(response, raw_refresh)
+    _set_access_cookie(response, access_token)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -134,7 +183,6 @@ def refresh(
     db: Session = Depends(get_db),
     raw_token: str = Depends(get_refresh_token_from_cookie),
 ) -> dict:
-    """Rotate the refresh token and issue a new access token."""
     new_raw, user_id = rotate_refresh_token(db, raw_token)
 
     user = db.get(User, user_id)
@@ -143,6 +191,7 @@ def refresh(
 
     access_token = create_access_token(user.id, user.email)
     _set_refresh_cookie(response, new_raw)
+    _set_access_cookie(response, access_token)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -152,15 +201,18 @@ def refresh(
 
 @router.post("/signout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def signout(
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
-    raw_token: str = Depends(get_refresh_token_from_cookie),
 ) -> None:
-    """Revoke all refresh tokens for this user (signs out all devices)."""
+    """Revoke all refresh tokens and clear both auth cookies."""
     try:
-        rt = db.query(RefreshToken).filter_by(token_hash=_sha256(raw_token)).first()
-        if rt:
-            revoke_all_refresh_tokens(db, rt.user_id)
+        raw_token = request.cookies.get(_REFRESH_COOKIE)
+        if raw_token:
+            rt = db.query(RefreshToken).filter_by(token_hash=_sha256(raw_token)).first()
+            if rt:
+                revoke_all_refresh_tokens(db, rt.user_id)
     except Exception:
-        pass  # always clear the cookie regardless
+        pass  # always clear cookies regardless
     _clear_refresh_cookie(response)
+    _clear_access_cookie(response)

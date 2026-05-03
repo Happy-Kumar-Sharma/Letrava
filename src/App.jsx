@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { TopBar, BottomNav, SearchScreen, SavedScreen } from './components/MobileChrome.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { Feed } from './components/Feed.jsx';
@@ -9,7 +9,7 @@ import { LoginModal } from './components/LoginModal.jsx';
 import { ProfileGate } from './components/ProfileGate.jsx';
 import { NotificationsScreen } from './components/NotificationsScreen.jsx';
 import { DesktopShell } from './components/Desktop.jsx';
-import { refreshAccessToken, setOnUnauthorized, authSignout } from './lib/api.js';
+import { refreshAccessToken, setOnUnauthorized, authSignout, triggerGlobalRefresh } from './lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -25,20 +25,77 @@ const Toast = ({ message, color = '#16A34A' }) => (
   </div>
 );
 
+// ---------------------------------------------------------------------------
+// Pull-to-refresh indicator
+// ---------------------------------------------------------------------------
+const PullIndicator = ({ progress, refreshing }) => {
+  const visible = progress > 0.05 || refreshing;
+  if (!visible) return null;
+  const size = 28;
+  const r = 11;
+  const circ = 2 * Math.PI * r;
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+      display: 'flex', justifyContent: 'center',
+      transform: `translateY(${Math.min(progress, 1) * 48 - 28}px)`,
+      transition: refreshing ? 'none' : 'transform 80ms linear',
+      pointerEvents: 'none',
+    }}>
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: '#fff', boxShadow: '0 2px 8px rgba(17,24,39,0.12)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F3F4F6" strokeWidth="2.5" />
+          <circle
+            cx={size/2} cy={size/2} r={r}
+            fill="none" stroke="#6366F1" strokeWidth="2.5"
+            strokeDasharray={refreshing ? `${circ * 0.7} ${circ * 0.3}` : `${circ * Math.min(progress, 1)} ${circ}`}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size/2} ${size/2})`}
+            style={{ transition: refreshing ? 'none' : 'stroke-dasharray 80ms linear' }}
+          >
+            {refreshing && (
+              <animateTransform
+                attributeName="transform"
+                type="rotate"
+                from={`0 ${size/2} ${size/2}`}
+                to={`360 ${size/2} ${size/2}`}
+                dur="0.8s"
+                repeatCount="indefinite"
+              />
+            )}
+          </circle>
+        </svg>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed]         = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [tab, setTab] = useState('home');
+  const [tab, setTab]               = useState('home');
   const [activeLetter, setActiveLetter] = useState(null);
   const [activeAuthor, setActiveAuthor] = useState(null);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [loginMode, setLoginMode] = useState('signup');
+  const [loginOpen, setLoginOpen]   = useState(false);
+  const [loginMode, setLoginMode]   = useState('signup');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorPrompt, setEditorPrompt] = useState(null);
-  const [feedTick, setFeedTick] = useState(0);
-  const [toast, setToast] = useState(null);
+  const [feedTick, setFeedTick]     = useState(0);
+  const [toast, setToast]           = useState(null);
+  const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 1024);
+  const [view, setView]             = useState('shell');
   const toastTimer = useRef(null);
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+
+  // Pull-to-refresh state
+  const screenRef    = useRef(null);
+  const ptrTouch     = useRef({ y0: 0, progress: 0 });
+  const [pullProgress, setPullProgress]   = useState(0);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const PTR_THRESHOLD = 72;
 
   const showToast = (message, color) => {
     clearTimeout(toastTimer.current);
@@ -46,26 +103,69 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
 
+  // Responsive desktop detection
   useEffect(() => {
     const onResize = () => setIsDesktop(window.innerWidth >= 1024);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Auth init + unauthorized callback
   useEffect(() => {
     setOnUnauthorized(() => {
       setAuthed(false);
       setView('shell');
       setTab('home');
+      setLoginMode('signin');
+      setLoginOpen(true);
     });
-    refreshAccessToken().then((token) => {
-      setAuthed(!!token);
+    refreshAccessToken().then((ok) => {
+      setAuthed(!!ok);
       setAuthChecked(true);
     });
     return () => clearTimeout(toastTimer.current);
   }, []);
 
-  const [view, setView] = useState('shell');
+  // Pull-to-refresh gesture (mobile only — no-op on desktop)
+  const doRefresh = useCallback(() => {
+    setPullRefreshing(true);
+    triggerGlobalRefresh();
+    setFeedTick((n) => n + 1);
+    setTimeout(() => setPullRefreshing(false), 1200);
+  }, []);
+
+  useEffect(() => {
+    const el = screenRef.current;
+    if (!el) return;
+    const onStart = (e) => {
+      if (el.scrollTop <= 0) ptrTouch.current.y0 = e.touches[0].clientY;
+    };
+    const onMove = (e) => {
+      if (!ptrTouch.current.y0) return;
+      const dy = e.touches[0].clientY - ptrTouch.current.y0;
+      if (dy > 0 && el.scrollTop <= 0) {
+        const p = Math.min(dy / PTR_THRESHOLD, 1.3);
+        ptrTouch.current.progress = p;
+        setPullProgress(p);
+      } else {
+        ptrTouch.current = { y0: 0, progress: 0 };
+        setPullProgress(0);
+      }
+    };
+    const onEnd = () => {
+      if (ptrTouch.current.progress >= 1) doRefresh();
+      ptrTouch.current = { y0: 0, progress: 0 };
+      setPullProgress(0);
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove',  onMove,  { passive: true });
+    el.addEventListener('touchend',   onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove',  onMove);
+      el.removeEventListener('touchend',   onEnd);
+    };
+  }, [doRefresh]);
 
   if (!authChecked) return null;
 
@@ -84,11 +184,19 @@ export default function App() {
 
   const handleSignOut = async () => {
     await authSignout();
+    // Clear all session state
     setAuthed(false);
     setView('shell');
     setTab('home');
     setActiveLetter(null);
     setActiveAuthor(null);
+    setEditorOpen(false);
+    setEditorPrompt(null);
+    setFeedTick(0);
+    setToast(null);
+    // Redirect to sign-in
+    setLoginMode('signin');
+    setLoginOpen(true);
   };
 
   const openLetter = (l) => {
@@ -127,9 +235,7 @@ export default function App() {
       return <NotificationsScreen onBack={() => setView('shell')} />;
     }
     if (view === 'letter' && activeLetter) {
-      return (
-        <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} me={me} />
-      );
+      return <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} me={me} />;
     }
     if (view === 'profile') {
       return (
@@ -140,28 +246,18 @@ export default function App() {
         />
       );
     }
-    if (tab === 'home') return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} onWrite={openEditor} />;
-    if (tab === 'search') return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
-    if (tab === 'saved') return <SavedScreen onOpenLetter={openLetter} />;
-    if (tab === 'profile') {
-      return (
-        <Profile
-          author={{ id: me.id, name: `@${me.username}`, palette: me.palette }}
-          self
-          onOpenLetter={openLetter}
-        />
-      );
-    }
+    if (tab === 'home')    return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} onWrite={openEditor} />;
+    if (tab === 'search')  return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
+    if (tab === 'saved')   return <SavedScreen onOpenLetter={openLetter} />;
+    if (tab === 'profile') return <Profile author={{ id: me.id, name: `@${me.username}`, palette: me.palette }} self onOpenLetter={openLetter} />;
     return null;
   };
 
-  // Desktop layout — authenticated only; falls through to mobile for guests
+  // Desktop layout — authenticated only
   if (isDesktop && authed) {
     return (
       <ProfileGate>
-        {(me) => (
-          <DesktopShell me={me} onSignOut={handleSignOut} />
-        )}
+        {(me) => <DesktopShell me={me} onSignOut={handleSignOut} />}
       </ProfileGate>
     );
   }
@@ -180,10 +276,13 @@ export default function App() {
           <ProfileGate>
             {(me) => (
               <>
-                {(view === 'shell') && (
+                {view === 'shell' && (
                   <TopBar tab={tab} onBell={() => setView('notifications')} onSignOut={handleSignOut} />
                 )}
-                <div className="ltv-screen">{authedScreen(me)}</div>
+                <div className="ltv-screen" ref={screenRef} style={{ position: 'relative' }}>
+                  <PullIndicator progress={pullProgress} refreshing={pullRefreshing} />
+                  {authedScreen(me)}
+                </div>
                 <BottomNav
                   tab={view === 'shell' ? tab : null}
                   onTab={handleTabChange}

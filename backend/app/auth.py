@@ -157,13 +157,23 @@ def revoke_all_refresh_tokens(db: Session, user_id: uuid.UUID) -> None:
 _bearer = HTTPBearer(auto_error=False)
 
 
+def _resolve_token(
+    request: Request,
+    creds: Optional[HTTPAuthorizationCredentials],
+) -> Optional[str]:
+    """httpOnly cookie takes precedence; Bearer header accepted as fallback."""
+    return request.cookies.get("access_token") or (creds.credentials if creds else None)
+
+
 def get_current_user(
+    request: Request,
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    if not creds:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
-    payload = _decode_access_token(creds.credentials)
+    token = _resolve_token(request, creds)
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    payload = _decode_access_token(token)
     sub = payload.get("sub")
     if not sub:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token missing sub")
@@ -174,13 +184,15 @@ def get_current_user(
 
 
 def get_optional_user(
+    request: Request,
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    if not creds:
+    token = _resolve_token(request, creds)
+    if not token:
         return None
     try:
-        payload = _decode_access_token(creds.credentials)
+        payload = _decode_access_token(token)
     except HTTPException:
         return None
     sub = payload.get("sub")

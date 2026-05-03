@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, aliased
 from ..auth import get_current_user
 from ..db import get_db
 from ..models import Comment, Follow, Letter, Reaction, User
+from sqlalchemy import or_
 from ..serializers import humanize_age
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -106,7 +107,39 @@ def get_notifications(
             "created_at": created_at,
         })
 
+    # --- @mentions in comment bodies ---
+    Mentioner = aliased(User)
+    mrow = db.execute(
+        select(Comment.id, Comment.created_at, Mentioner, Letter.title)
+        .join(Letter, Letter.id == Comment.letter_id)
+        .join(Mentioner, Mentioner.id == Comment.author_id)
+        .where(
+            Comment.body.ilike(f'%@{user.username}%'),
+            Comment.author_id != user.id,
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(_LIMIT)
+    ).all()
+    for cid, created_at, mentioner, letter_title in mrow:
+        items.append({
+            "id": f"mn-{cid}",
+            "kind": "mention",
+            "actor": _actor_dict(mentioner),
+            "what": "mentioned you in a comment",
+            "letter_title": letter_title,
+            "age": humanize_age(created_at),
+            "unread": _unread(created_at),
+            "created_at": created_at,
+        })
+
     items.sort(key=lambda x: x["created_at"], reverse=True)
     for item in items:
         del item["created_at"]
-    return items[:_LIMIT]
+    # Deduplicate (a comment might match both 'reaction on my letter' path and 'mention' path)
+    seen: set[str] = set()
+    unique = []
+    for item in items:
+        if item["id"] not in seen:
+            seen.add(item["id"])
+            unique.append(item)
+    return unique[:_LIMIT]
