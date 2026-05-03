@@ -128,7 +128,7 @@ export default function App() {
     }
     if (view === 'letter' && activeLetter) {
       return (
-        <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} />
+        <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} me={me} />
       );
     }
     if (view === 'profile') {

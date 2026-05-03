@@ -119,6 +119,8 @@ class CommentOut(BaseModel):
     created_at: datetime
     author: AuthorOut
     parent_id: Optional[int]
+    likes_count: int = 0
+    liked_by_me: bool = False
     replies: list["CommentOut"] = Field(default_factory=list)
 
 

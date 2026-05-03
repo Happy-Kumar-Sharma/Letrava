@@ -29,6 +29,7 @@ import {
 import { Avatar, Tag, Button, Logo } from './Shared.jsx';
 import { Editor } from './Editor.jsx';
 import { Profile } from './Profile.jsx';
+import { CommentsSection } from './CommentsSection.jsx';
 import { useApi, getJSON, postJSON, delJSON, putJSON } from '../lib/api.js';
 
 // ---------------------------------------------------------------------------
@@ -212,31 +213,44 @@ const DesktopHeader = ({ onCmdK, onCompose, me }) => (
 // ---------------------------------------------------------------------------
 // Feed column (master list)
 // ---------------------------------------------------------------------------
-const FeedColumn = ({ activeId, onOpen, feed = 'trending', onFeedChange }) => {
-  const { data: letters, loading } = useApi(`/api/letters?feed=${feed}`, [feed]);
+const ROUTE_TITLES = { discover: 'Discover', home: 'Home', saved: 'Saved' };
+
+const FeedColumn = ({ activeId, onOpen, route = 'discover', feed = 'trending', onFeedChange, onOpenProfile }) => {
+  // Saved letters come from a different endpoint
+  const isSaved = route === 'saved';
+  const isHome  = route === 'home';
+  const apiUrl  = isSaved ? '/api/saves' : `/api/letters?feed=${feed}`;
+  const { data: letters, loading } = useApi(apiUrl, [route, feed]);
   const items = letters || [];
 
   return (
     <section style={{ background: '#fff', borderRight: '1px solid ' + C.line, overflowY: 'auto', display: 'flex', flexDirection: 'column' }} className="ltv-desktop-col">
       <div style={{ position: 'sticky', top: 0, zIndex: 2, background: '#fff', borderBottom: '1px solid ' + C.line, padding: '14px 20px' }}>
-        <h2 style={{ margin: '0 0 10px', fontFamily: C.serif, fontSize: 22, fontWeight: 500, color: C.ink }}>Discover</h2>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['trending', 'latest', 'following'].map((k) => (
-            <button
-              key={k}
-              onClick={() => onFeedChange(k)}
-              style={{
-                padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 7,
-                color: feed === k ? C.ink : C.mute,
-                background: feed === k ? '#F3F4F6' : 'transparent',
-                border: 'none', cursor: 'pointer', fontFamily: C.sans,
-                textTransform: 'capitalize',
-              }}
-            >
-              {k.charAt(0).toUpperCase() + k.slice(1)}
-            </button>
-          ))}
-        </div>
+        <h2 style={{ margin: '0 0 10px', fontFamily: C.serif, fontSize: 22, fontWeight: 500, color: C.ink }}>
+          {ROUTE_TITLES[route] || 'Discover'}
+        </h2>
+        {!isSaved && !isHome && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['trending', 'latest', 'following'].map((k) => (
+              <button
+                key={k}
+                onClick={() => onFeedChange(k)}
+                style={{
+                  padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 7,
+                  color: feed === k ? C.ink : C.mute,
+                  background: feed === k ? '#F3F4F6' : 'transparent',
+                  border: 'none', cursor: 'pointer', fontFamily: C.sans,
+                  textTransform: 'capitalize',
+                }}
+              >
+                {k.charAt(0).toUpperCase() + k.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
+        {isHome && (
+          <div style={{ fontSize: 12, color: C.mute }}>Letters from people you follow</div>
+        )}
       </div>
 
       {loading && <div style={{ padding: 24, color: C.mute2, fontSize: 13 }}>Loading…</div>}
@@ -256,8 +270,10 @@ const FeedColumn = ({ activeId, onOpen, feed = 'trending', onFeedChange }) => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 11, color: C.mute }}>
-              <Avatar name={l.author.name} size={18} palette={l.author.palette} src={l.author.avatar} />
-              <span style={{ fontWeight: 600, color: C.ink }}>{l.author.name}</span>
+              <span onClick={(e) => { e.stopPropagation(); onOpenProfile?.(l.author); }} style={{ cursor: 'pointer' }}>
+                <Avatar name={l.author.name} size={18} palette={l.author.palette} src={l.author.avatar} />
+              </span>
+              <span onClick={(e) => { e.stopPropagation(); onOpenProfile?.(l.author); }} style={{ fontWeight: 600, color: C.ink, cursor: 'pointer' }}>{l.author.name}</span>
               <span>·</span><span>{l.age}</span>
               <span>·</span><span>{l.read_time}</span>
             </div>
@@ -281,7 +297,7 @@ const FeedColumn = ({ activeId, onOpen, feed = 'trending', onFeedChange }) => {
 // ---------------------------------------------------------------------------
 // Reader pane (inspector)
 // ---------------------------------------------------------------------------
-const ReaderPane = ({ letter, onOpenProfile }) => {
+const ReaderPane = ({ letter, onOpenProfile, me }) => {
   const [reaction, setReaction] = useState(letter?.my_reaction || null);
   const [saved, setSaved] = useState(!!letter?.saved);
   const [following, setFollowing] = useState(false);
@@ -290,13 +306,6 @@ const ReaderPane = ({ letter, onOpenProfile }) => {
     letter ? `/api/letters/${letter.id}` : null,
     [letter?.id]
   );
-  const { data: commentsRaw, refetch: refetchComments } = useApi(
-    letter ? `/api/letters/${letter.id}/comments` : null,
-    [letter?.id]
-  );
-  const comments = commentsRaw || [];
-  const [draft, setDraft] = useState('');
-  const [posting, setPosting] = useState(false);
 
   const full = fresh || letter;
 
@@ -305,10 +314,6 @@ const ReaderPane = ({ letter, onOpenProfile }) => {
     setReaction(fresh.my_reaction || null);
     setSaved(!!fresh.saved);
   }, [fresh]);
-
-  useEffect(() => {
-    setDraft('');
-  }, [letter?.id]);
 
   const onReact = async (key) => {
     if (busy) return;
@@ -332,16 +337,6 @@ const ReaderPane = ({ letter, onOpenProfile }) => {
       else      await postJSON(`/api/letters/${full.id}/save`, {});
       refetch();
     } catch { setSaved(was); } finally { setBusy(false); }
-  };
-
-  const postComment = async () => {
-    if (!draft.trim() || posting) return;
-    setPosting(true);
-    try {
-      await postJSON(`/api/letters/${full.id}/comments`, { body: draft.trim() });
-      setDraft('');
-      refetchComments();
-    } catch { /* ignore */ } finally { setPosting(false); }
   };
 
   if (!letter) {
@@ -452,42 +447,8 @@ const ReaderPane = ({ letter, onOpenProfile }) => {
           </div>
         </div>
 
-        {/* Comments */}
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 14 }}>
-            Comments · {comments.length}
-          </div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-            <div style={{ flex: 1, padding: 12, border: '1px solid ' + C.line2, borderRadius: 12, background: '#fff' }}>
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Leave a thought…"
-                rows={2}
-                style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontFamily: C.serif, fontSize: 14, lineHeight: 1.55, color: C.ink, background: 'transparent', boxSizing: 'border-box' }}
-              />
-              {draft.trim() && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                  <Button variant="primary" size="sm" onClick={postComment} disabled={posting}>
-                    {posting ? 'Posting…' : 'Post'}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-          {comments.map((c) => (
-            <div key={c.id} style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-              <Avatar name={c.author?.name} size={32} palette={c.author?.palette} src={c.author?.avatar} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
-                  {c.author?.name} <span style={{ color: C.mute2, fontWeight: 400 }}>· {c.age} ago</span>
-                </div>
-                <div style={{ fontSize: 14, lineHeight: 1.6, color: '#374151', fontFamily: C.serif }}>{c.body}</div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
+      <CommentsSection letterId={full.id} me={me} onOpenProfile={onOpenProfile} compact />
     </main>
   );
 };
@@ -770,12 +731,26 @@ export const DesktopShell = ({ me, onSignOut }) => {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  const openProfile = (author) => {
+    if (!author?.id) return;
+    const name = author.name?.startsWith('@') ? author.name : `@${author.name}`;
+    setProfileTarget({ authorId: author.id, authorName: name, authorPalette: author.palette });
+    setRoute('profile');
+    setActiveLetter(null);
+  };
+
   const handleRoute = (r, meta = {}) => {
     if (r === 'editor') { setEditorOpen(true); return; }
-    if (r === 'profile' && meta.authorId) setProfileTarget(meta);
+    if (r === 'profile') {
+      if (meta.authorId) setProfileTarget(meta);
+      else setProfileTarget(null);
+    }
     setRoute(r);
     setActiveLetter(null);
   };
+
+  // Reset feedTab when switching between discover/home/saved
+  const routeFeed = route === 'home' ? 'following' : route === 'saved' ? 'saved' : feedTab;
 
   const fullPane = ['notifications', 'profile'].includes(route);
   const gridCols = fullPane ? '220px 1fr' : '220px 380px 1fr';
@@ -800,10 +775,12 @@ export const DesktopShell = ({ me, onSignOut }) => {
             <FeedColumn
               activeId={activeLetter?.id}
               onOpen={setActiveLetter}
-              feed={feedTab}
+              route={route}
+              feed={routeFeed}
               onFeedChange={setFeedTab}
+              onOpenProfile={openProfile}
             />
-            <ReaderPane letter={activeLetter} />
+            <ReaderPane letter={activeLetter} me={me} onOpenProfile={openProfile} />
           </>
         )}
 

@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
+import { CommentsSection } from './CommentsSection.jsx';
 import { useApi, putJSON, postJSON, delJSON } from '../lib/api.js';
 
 const REACTION_ICONS = { Heart, Lightbulb, CircleDot, Cloud, Sun, Sparkles };
@@ -26,7 +27,7 @@ const REACTIONS = [
   { key: 'inspiring',  label: 'Inspiring',  icon: 'Sparkles',  color: '#F59E0B' },
 ];
 
-export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile }) => {
+export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) => {
   const { data: fresh, refetch } = useApi(`/api/letters/${seedLetter.id}`, [seedLetter.id]);
   const letter = fresh || seedLetter;
 
@@ -349,7 +350,7 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile }) => {
         )}
       </div>
 
-      <CommentsSection letterId={letter.id} />
+      <CommentsSection letterId={letter.id} me={me} onOpenProfile={onOpenProfile} />
     </div>
   );
 };
@@ -376,138 +377,3 @@ const ReactionBar = ({ breakdown, total }) => {
   );
 };
 
-// ---- Comments ----------------------------------------------------------------
-const CommentsSection = ({ letterId }) => {
-  const { data, loading, error, refetch } = useApi(`/api/letters/${letterId}/comments`, [letterId]);
-  const comments = data || [];
-  const [draft, setDraft] = useState('');
-  const [posting, setPosting] = useState(false);
-
-  const post = async () => {
-    if (!draft.trim() || posting) return;
-    setPosting(true);
-    try {
-      await postJSON(`/api/letters/${letterId}/comments`, { body: draft.trim() });
-      setDraft('');
-      refetch();
-    } catch (err) {
-      console.error('comment failed', err);
-    } finally {
-      setPosting(false);
-    }
-  };
-
-  return (
-    <section style={{ padding: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 14 }}>
-        Comments · {comments.length}
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <Avatar name="@you" size={32} />
-        <div style={{ flex: 1 }}>
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add a thoughtful comment…"
-            rows={2}
-            style={{
-              width: '100%',
-              padding: 10,
-              borderRadius: 10,
-              border: '1px solid #E5E7EB',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              outline: 'none',
-              resize: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={post}
-              disabled={!draft.trim() || posting}
-            >
-              {posting ? 'Posting…' : 'Post'}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {loading && (
-        <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>Loading comments…</div>
-      )}
-      {error && (
-        <div style={{ padding: '12px 0', color: '#9CA3AF', fontSize: 13 }}>
-          Could not load comments.
-        </div>
-      )}
-      {!loading && !error && comments.length === 0 && (
-        <div style={{ padding: '8px 0 16px', color: '#9CA3AF', fontSize: 13 }}>
-          Be the first to leave a thought.
-        </div>
-      )}
-
-      {comments.map((c) => (
-        <div key={c.id} style={{ marginBottom: 18 }}>
-          <Comment
-            name={c.author?.name}
-            palette={c.author?.palette}
-            age={c.age}
-            body={c.body}
-          />
-          {c.replies && c.replies.length > 0 && (
-            <div
-              style={{
-                marginLeft: 40,
-                marginTop: 14,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-              }}
-            >
-              {c.replies.map((r) => (
-                <Comment
-                  key={r.id}
-                  name={r.author?.name}
-                  palette={r.author?.palette}
-                  age={r.age}
-                  body={r.body}
-                  reply
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </section>
-  );
-};
-
-const Comment = ({ name, palette, age, body, reply }) => (
-  <div style={{ display: 'flex', gap: 10 }}>
-    <Avatar name={name} size={reply ? 24 : 32} palette={palette} />
-    <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{name}</span>
-        <span style={{ fontSize: 11, color: '#9CA3AF' }}>{age} ago</span>
-      </div>
-      <div style={{ fontSize: 13, lineHeight: 1.5, color: '#374151', marginBottom: 4 }}>{body}</div>
-      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
-        <button style={ghostBtn}>♡ Like</button>
-        <button style={ghostBtn}>Reply</button>
-      </div>
-    </div>
-  </div>
-);
-
-const ghostBtn = {
-  background: 'transparent',
-  border: 'none',
-  cursor: 'pointer',
-  color: 'inherit',
-  padding: 0,
-  fontSize: 11,
-};
