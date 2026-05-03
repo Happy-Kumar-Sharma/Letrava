@@ -7,6 +7,8 @@ import { Profile } from './components/Profile.jsx';
 import { Editor } from './components/Editor.jsx';
 import { LoginModal } from './components/LoginModal.jsx';
 import { ProfileGate } from './components/ProfileGate.jsx';
+import { NotificationsScreen } from './components/NotificationsScreen.jsx';
+import { DesktopShell } from './components/Desktop.jsx';
 import { refreshAccessToken, setOnUnauthorized, authSignout } from './lib/api.js';
 
 // ---------------------------------------------------------------------------
@@ -36,12 +38,19 @@ export default function App() {
   const [feedTick, setFeedTick] = useState(0);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
 
   const showToast = (message, color) => {
     clearTimeout(toastTimer.current);
     setToast({ message, color });
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
+
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     setOnUnauthorized(() => {
@@ -114,6 +123,9 @@ export default function App() {
   };
 
   const authedScreen = (me) => {
+    if (view === 'notifications') {
+      return <NotificationsScreen onBack={() => setView('shell')} />;
+    }
     if (view === 'letter' && activeLetter) {
       return (
         <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} />
@@ -143,6 +155,17 @@ export default function App() {
     return null;
   };
 
+  // Desktop layout — authenticated only; falls through to mobile for guests
+  if (isDesktop && authed) {
+    return (
+      <ProfileGate>
+        {(me) => (
+          <DesktopShell me={me} onSignOut={handleSignOut} />
+        )}
+      </ProfileGate>
+    );
+  }
+
   return (
     <div className="ltv-shell-wrap">
       {toast && <Toast message={toast.message} color={toast.color} />}
@@ -157,8 +180,8 @@ export default function App() {
           <ProfileGate>
             {(me) => (
               <>
-                {view === 'shell' && (
-                  <TopBar tab={tab} onBell={() => {}} onSignOut={handleSignOut} />
+                {(view === 'shell') && (
+                  <TopBar tab={tab} onBell={() => setView('notifications')} onSignOut={handleSignOut} />
                 )}
                 <div className="ltv-screen">{authedScreen(me)}</div>
                 <BottomNav

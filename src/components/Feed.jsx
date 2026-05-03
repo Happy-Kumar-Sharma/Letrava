@@ -18,14 +18,23 @@ const TABS = [
   { key: 'following', label: 'Following' },
 ];
 
+const MOODS = [
+  { key: 'hopeful',    label: 'Hopeful',    color: '#E07856' },
+  { key: 'thoughtful', label: 'Thoughtful', color: '#8B5CF6' },
+  { key: 'tender',     label: 'Tender',     color: '#14B8A6' },
+  { key: 'sad',        label: 'Sad',        color: '#64748B' },
+];
+
 export const Feed = ({ onOpenLetter, onOpenProfile, onWrite }) => {
   const [mode, setMode] = useState('trending');
-  const { data: letters, loading, error, refetch } = useApi(`/api/letters?feed=${mode}`, [mode]);
+  const [moodFilter, setMoodFilter] = useState(null);
+  const apiUrl = `/api/letters?feed=${mode}${moodFilter ? `&mood=${moodFilter}` : ''}`;
+  const { data: letters, loading, error, refetch } = useApi(apiUrl, [mode, moodFilter]);
   const { data: prompt } = useApi('/api/prompts/current');
 
   return (
     <div>
-      {/* Sticky tab row */}
+      {/* Sticky tab row + mood filter */}
       <div
         style={{
           position: 'sticky',
@@ -34,31 +43,86 @@ export const Feed = ({ onOpenLetter, onOpenProfile, onWrite }) => {
           background: 'rgba(255,255,255,0.96)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          display: 'flex',
           borderBottom: '1px solid #F3F4F6',
         }}
       >
-        {TABS.map((t) => (
+        <div style={{ display: 'flex' }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setMode(t.key)}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '14px 8px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: mode === t.key ? '#111827' : '#9CA3AF',
+                borderBottom: mode === t.key ? '2px solid #6366F1' : '2px solid transparent',
+                marginBottom: -1,
+                transition: 'color 160ms cubic-bezier(0.2,0.7,0.2,1)',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Mood filter bar */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            padding: '10px 16px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+          }}
+        >
           <button
-            key={t.key}
-            onClick={() => setMode(t.key)}
+            onClick={() => setMoodFilter(null)}
             style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '14px 8px',
-              fontSize: 13,
+              padding: '5px 11px',
+              fontSize: 12,
               fontWeight: 600,
-              color: mode === t.key ? '#111827' : '#9CA3AF',
-              borderBottom: mode === t.key ? '2px solid #6366F1' : '2px solid transparent',
-              marginBottom: -1,
-              transition: 'color 160ms cubic-bezier(0.2,0.7,0.2,1)',
+              borderRadius: 999,
+              whiteSpace: 'nowrap',
+              border: '1px solid ' + (moodFilter === null ? '#111827' : '#E5E7EB'),
+              background: moodFilter === null ? '#111827' : '#fff',
+              color: moodFilter === null ? '#fff' : '#374151',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'all 160ms cubic-bezier(0.2,0.7,0.2,1)',
             }}
           >
-            {t.label}
+            All moods
           </button>
-        ))}
+          {MOODS.map((m) => {
+            const active = moodFilter === m.key;
+            return (
+              <button
+                key={m.key}
+                onClick={() => setMoodFilter(active ? null : m.key)}
+                style={{
+                  padding: '5px 11px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 999,
+                  whiteSpace: 'nowrap',
+                  border: '1px solid ' + (active ? m.color : '#E5E7EB'),
+                  background: active ? m.color + '14' : '#fff',
+                  color: active ? m.color : '#374151',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 160ms cubic-bezier(0.2,0.7,0.2,1)',
+                }}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Prompt of the week — refined gradient + watermark feather */}

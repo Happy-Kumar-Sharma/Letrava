@@ -162,8 +162,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed !important; }
   .ltv-shell { border-left: none; border-right: none; }
 }
 
-/* Desktop sidebar disabled — the shell now uses the whole window. */
-.desktop-context { display: none !important; }
+/* Desktop column — hide scrollbar, keep scroll behavior. */
+.ltv-desktop-col::-webkit-scrollbar { width: 0; height: 0; }
+.ltv-desktop-col { scrollbar-width: none; }
+
+/* On wide viewports let the shell fill the screen (desktop layout takes over). */
+@media (min-width: 1024px) {
+  .ltv-shell { max-width: 100%; border-left: none; border-right: none; }
+}
 
 .ltv-screen {
   flex: 1;
