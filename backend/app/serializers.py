@@ -91,6 +91,7 @@ def letter_to_dict(
         "saves": scount,
         "saved": saved,
         "my_reaction": my_reaction,
+        "share_code": letter.share_code,
     }
 
 

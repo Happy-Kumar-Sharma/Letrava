@@ -11,7 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Avatar, Tag, Button } from './Shared.jsx';
-import { useApi, putJSON, delJSON, postJSON } from '../lib/api.js';
+import { useApi, putJSON, delJSON, postJSON, requestShareCode } from '../lib/api.js';
 import { useShare } from '../hooks/useShare.js';
 
 const TABS = [
@@ -401,7 +401,11 @@ const FeedLetter = ({ letter, me, onChanged, onOpen, onOpenProfile, onDeleted, o
           <span>{saveCount}</span>
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${letter.id}` }); }}
+          onClick={async (e) => {
+            e.stopPropagation();
+            const code = await requestShareCode(letter.id);
+            share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${code}` });
+          }}
           style={{ ...actionBtn, marginLeft: 'auto' }}
           aria-label="Share"
         >

@@ -33,7 +33,7 @@ import { Avatar, Tag, Button, Logo, BodyRenderer } from './Shared.jsx';
 import { Editor } from './Editor.jsx';
 import { Profile } from './Profile.jsx';
 import { CommentsSection } from './CommentsSection.jsx';
-import { useApi, getJSON, postJSON, delJSON, putJSON, triggerGlobalRefresh } from '../lib/api.js';
+import { useApi, getJSON, postJSON, delJSON, putJSON, triggerGlobalRefresh, requestShareCode } from '../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Token shorthands
@@ -397,7 +397,10 @@ const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted, onEdit }) => {
           <button style={iconBtnStyle(32)} onClick={onToggleSave} aria-label={saved ? 'Saved' : 'Save'} disabled={busy}>
             {saved ? <BookmarkCheck size={16} color={C.indigo} strokeWidth={1.75} /> : <Bookmark size={16} strokeWidth={1.75} />}
           </button>
-          <button style={iconBtnStyle(32)} aria-label="Share" onClick={() => share({ title: full.title, text: full.excerpt, url: `${window.location.origin}/letter/${full.id}` })}><Share2 size={16} strokeWidth={1.75} /></button>
+          <button style={iconBtnStyle(32)} aria-label="Share" onClick={async () => {
+            const code = await requestShareCode(full.id);
+            share({ title: full.title, text: full.excerpt, url: `${window.location.origin}/letter/${code}` });
+          }}><Share2 size={16} strokeWidth={1.75} /></button>
           {me && String(me.id) === String(full.author?.id) ? (
             <div style={{ position: 'relative' }}>
               <button style={iconBtnStyle(32)} aria-label="More" onClick={() => { setShowMenu(!showMenu); setConfirmDel(false); }}>

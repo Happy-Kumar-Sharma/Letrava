@@ -113,6 +113,7 @@ class LetterOut(BaseModel):
     saves: int
     saved: bool = False
     my_reaction: Optional[str] = None
+    share_code: Optional[str] = None
 
 
 class CommentCreate(BaseModel):

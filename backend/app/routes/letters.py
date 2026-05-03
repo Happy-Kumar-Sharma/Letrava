@@ -1,6 +1,7 @@
 """/api/letters — create, list (trending/latest/following), retrieve, delete."""
 from __future__ import annotations
 
+import secrets
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -80,6 +81,44 @@ def list_letters(
     letters = db.scalars(stmt).all()
     viewer_id = viewer.id if viewer else None
     return [letter_to_dict(db, lt, viewer_id) for lt in letters]
+
+
+@router.get("/code/{code}", response_model=LetterOut)
+def get_letter_by_code(
+    code: str,
+    db: Session = Depends(get_db),
+    viewer: Optional[User] = Depends(get_optional_user),
+) -> dict:
+    """Resolve a 12-char share code to a full letter (no auth required)."""
+    letter = db.scalar(
+        select(Letter).options(selectinload(Letter.author)).where(Letter.share_code == code)
+    )
+    if not letter:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
+    return letter_to_dict(db, letter, viewer.id if viewer else None)
+
+
+@router.post("/{letter_id}/share-code", status_code=status.HTTP_200_OK)
+def get_or_create_share_code(
+    letter_id: int,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Idempotent: return the letter's share code, generating a 12-char one
+    on the first call. No authentication required — any visitor can trigger
+    code generation (the integer letter_id is already known at that point)."""
+    letter = db.get(Letter, letter_id)
+    if not letter:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
+    if not letter.share_code:
+        # Collision-resistant: retry until unique (probability of collision is
+        # ~1 in 4.7×10²¹ so this loop almost always runs exactly once).
+        for _ in range(10):
+            candidate = secrets.token_urlsafe(9)  # 9 bytes → exactly 12 base64url chars
+            if not db.scalar(select(Letter).where(Letter.share_code == candidate)):
+                letter.share_code = candidate
+                db.commit()
+                break
+    return {"code": letter.share_code}
 
 
 @router.get("/{letter_id}", response_model=LetterOut)

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm, BodyRenderer } from './Shared.jsx';
 import { CommentsSection } from './CommentsSection.jsx';
-import { useApi, putJSON, postJSON, delJSON } from '../lib/api.js';
+import { useApi, putJSON, postJSON, delJSON, requestShareCode } from '../lib/api.js';
 import { useShare } from '../hooks/useShare.js';
 
 const REACTION_ICONS = { Heart, Lightbulb, CircleDot, Cloud, Sun, Sparkles };
@@ -178,7 +178,10 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, on
             <button
               style={iconBtnSm}
               aria-label="Share"
-              onClick={() => share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${letter.id}` })}
+              onClick={async () => {
+                const code = await requestShareCode(letter.id);
+                share({ title: letter.title, text: letter.excerpt, url: `${window.location.origin}/letter/${code}` });
+              }}
             >
               <Share2 size={20} strokeWidth={1.75} />
             </button>

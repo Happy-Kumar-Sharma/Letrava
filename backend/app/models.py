@@ -57,6 +57,7 @@ class Letter(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     excerpt: Mapped[str] = mapped_column(Text, nullable=False)
     mood: Mapped[str | None] = mapped_column(String(20))
+    share_code: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )

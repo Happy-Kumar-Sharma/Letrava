@@ -15,13 +15,20 @@ import { getJSON, setOnUnauthorized, authSignout, triggerGlobalRefresh, useApi }
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Parse /letter/:id from a pathname, returns integer id or null. */
-function parseLetterId(pathname) {
-  const m = pathname.match(/^\/letter\/(\d+)(?:\/.*)?$/);
-  return m ? parseInt(m[1], 10) : null;
+/**
+ * Parse /letter/:slug from a pathname.
+ * Slug can be an integer ID ("123") or a 12-char share code ("abc123xyz789").
+ * Returns the raw slug string, or null if the path doesn't match.
+ */
+function parseLetterSlug(pathname) {
+  const m = pathname.match(/^\/letter\/([A-Za-z0-9_-]{1,20})(?:\/.*)?$/);
+  return m ? m[1] : null;
 }
 
-/** Push /letter/:id into browser history. */
+/** Keep old name as alias for the places that call it with an integer. */
+const parseLetterId = parseLetterSlug;
+
+/** Push /letter/:id into browser history (integer ID for back/forward nav). */
 function pushLetterUrl(id) {
   window.history.pushState({ letterId: id }, '', `/letter/${id}`);
 }
@@ -95,13 +102,15 @@ const PullIndicator = ({ progress, refreshing }) => {
 };
 
 // ---------------------------------------------------------------------------
-// Loader for a letter by ID (used by both authed and public paths)
+// Loader for a letter by ID or share code (used by both authed and public)
 // ---------------------------------------------------------------------------
-const LetterLoader = ({ letterId, children }) => {
-  const { data: letter, loading } = useApi(
-    letterId ? `/api/letters/${letterId}` : null,
-    [letterId]
-  );
+const LetterLoader = ({ letterSlug, children }) => {
+  // Distinguish integer ID ("123") from share code ("abc123xyz789")
+  const isId  = letterSlug && /^\d+$/.test(letterSlug);
+  const path  = letterSlug
+    ? (isId ? `/api/letters/${letterSlug}` : `/api/letters/code/${letterSlug}`)
+    : null;
+  const { data: letter, loading } = useApi(path, [letterSlug]);
   if (loading) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 14 }}>
@@ -136,8 +145,8 @@ export default function App() {
   const [toast, setToast]             = useState(null);
   const [isDesktop, setIsDesktop]     = useState(() => window.innerWidth >= 1024);
   const [view, setView]               = useState('shell');
-  // URL-driven letter ID (set from pathname on load / popstate)
-  const [urlLetterId, setUrlLetterId] = useState(() => parseLetterId(window.location.pathname));
+  // URL-driven letter slug — integer string or 12-char share code
+  const [urlLetterSlug, setUrlLetterSlug] = useState(() => parseLetterSlug(window.location.pathname));
   const toastTimer = useRef(null);
 
   // Pull-to-refresh state
@@ -181,7 +190,7 @@ export default function App() {
     // Open shared letter on startup if URL contains /letter/:id
     const id = parseLetterId(window.location.pathname);
     if (id) {
-      setUrlLetterId(id);
+      setUrlLetterSlug(id);
       setView('letter');
     }
 
@@ -193,10 +202,10 @@ export default function App() {
     const onPop = () => {
       const id = parseLetterId(window.location.pathname);
       if (id) {
-        setUrlLetterId(id);
+        setUrlLetterSlug(id);
         setView('letter');
       } else {
-        setUrlLetterId(null);
+        setUrlLetterSlug(null);
         setActiveLetter(null);
         setView('shell');
       }
@@ -274,7 +283,7 @@ export default function App() {
     setEditorOpen(false);
     setEditorPrompt(null);
     setToast(null);
-    // Keep urlLetterId so logged-out public view still works
+    // Keep urlLetterSlug so logged-out public view still works
     setLoginMode('signin');
     setLoginOpen(true);
     pushRootUrl();
@@ -284,7 +293,7 @@ export default function App() {
   const openLetter = (l) => {
     pushLetterUrl(l.id);
     setActiveLetter(l);
-    setUrlLetterId(null); // use activeLetter object, not id-only lookup
+    setUrlLetterSlug(null); // use activeLetter object, not id-only lookup
     setView('letter');
     // Unauthenticated users can still view — publicView handled in render
   };
@@ -292,7 +301,7 @@ export default function App() {
   const goBackFromLetter = () => {
     pushRootUrl();
     setActiveLetter(null);
-    setUrlLetterId(null);
+    setUrlLetterSlug(null);
     setView('shell');
   };
 
@@ -356,9 +365,9 @@ export default function App() {
         );
       }
       // Only have an ID (came via shared URL) — load by ID
-      if (urlLetterId) {
+      if (urlLetterSlug) {
         return (
-          <LetterLoader letterId={urlLetterId}>
+          <LetterLoader letterSlug={urlLetterSlug}>
             {(letter) => (
               <LetterDetail
                 letter={letter}
@@ -417,7 +426,7 @@ export default function App() {
 
   // ── Public (unauthenticated) letter view ──────────────────────────────────
   // Shown when someone opens a shared /letter/:id link without being logged in.
-  const showPublicLetter = !authed && (view === 'letter' || urlLetterId) && urlLetterId;
+  const showPublicLetter = !authed && (view === 'letter' || urlLetterSlug) && urlLetterSlug;
 
   return (
     <div className="ltv-shell-wrap">
@@ -425,11 +434,11 @@ export default function App() {
       <div className="ltv-shell">
         {showPublicLetter ? (
           <div className="ltv-screen">
-            <LetterLoader letterId={urlLetterId}>
+            <LetterLoader letterSlug={urlLetterSlug}>
               {(letter) => (
                 <LetterDetail
                   letter={letter}
-                  onBack={() => { pushRootUrl(); setUrlLetterId(null); setView('shell'); }}
+                  onBack={() => { pushRootUrl(); setUrlLetterSlug(null); setView('shell'); }}
                   onOpenProfile={() => openLogin('signup')}
                   me={null}
                   publicView
