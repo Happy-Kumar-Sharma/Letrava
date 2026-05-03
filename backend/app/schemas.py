@@ -80,6 +80,7 @@ class UserPublic(BaseModel):
     followers_count: int
     following_count: int
     is_following: bool = False
+    notify_new_letters: bool = False
 
 
 class LetterCreate(BaseModel):
@@ -137,3 +138,4 @@ class WeeklyPromptOut(BaseModel):
 class FollowOut(BaseModel):
     is_following: bool
     followers_count: int
+    notify_new_letters: bool = False

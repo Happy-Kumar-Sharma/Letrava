@@ -15,6 +15,7 @@ import {
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { CommentsSection } from './CommentsSection.jsx';
 import { useApi, putJSON, postJSON, delJSON } from '../lib/api.js';
+import { useShare } from '../hooks/useShare.js';
 
 const REACTION_ICONS = { Heart, Lightbulb, CircleDot, Cloud, Sun, Sparkles };
 
@@ -28,6 +29,7 @@ const REACTIONS = [
 ];
 
 export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) => {
+  const share = useShare();
   const { data: fresh, refetch } = useApi(`/api/letters/${seedLetter.id}`, [seedLetter.id]);
   const letter = fresh || seedLetter;
 
@@ -171,7 +173,11 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) 
                 <Bookmark size={20} color="#374151" strokeWidth={1.75} />
               )}
             </button>
-            <button style={iconBtnSm} aria-label="Share">
+            <button
+              style={iconBtnSm}
+              aria-label="Share"
+              onClick={() => share({ title: letter.title, text: letter.excerpt, url: window.location.href })}
+            >
               <Share2 size={20} strokeWidth={1.75} />
             </button>
             <button style={iconBtnSm} aria-label="More">

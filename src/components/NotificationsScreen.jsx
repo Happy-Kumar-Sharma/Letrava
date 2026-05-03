@@ -5,21 +5,24 @@ import {
   MessageCircle,
   UserPlus,
   AtSign,
+  Feather,
 } from 'lucide-react';
 import { Avatar, Button } from './Shared.jsx';
 import { useApi, postJSON, delJSON } from '../lib/api.js';
 
 const KIND_ICON = {
-  reaction: Heart,
-  comment:  MessageCircle,
-  follow:   UserPlus,
-  mention:  AtSign,
+  reaction:   Heart,
+  comment:    MessageCircle,
+  follow:     UserPlus,
+  mention:    AtSign,
+  new_letter: Feather,
 };
 const KIND_TINT = {
-  reaction: { bg: '#FBE5DA', fg: '#B85E3E' },
-  comment:  { bg: '#E0F2EF', fg: '#0F766E' },
-  follow:   { bg: '#EEF2FF', fg: '#4338CA' },
-  mention:  { bg: '#F1ECFF', fg: '#6B21A8' },
+  reaction:   { bg: '#FBE5DA', fg: '#B85E3E' },
+  comment:    { bg: '#E0F2EF', fg: '#0F766E' },
+  follow:     { bg: '#EEF2FF', fg: '#4338CA' },
+  mention:    { bg: '#F1ECFF', fg: '#6B21A8' },
+  new_letter: { bg: '#EEF2FF', fg: '#4338CA' },
 };
 
 const TABS = [

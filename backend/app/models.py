@@ -136,6 +136,9 @@ class Follow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    notify_new_letters: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     __table_args__ = (CheckConstraint("follower_id <> followee_id", name="ck_follow_self"),)
 
 

@@ -103,14 +103,50 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+MAX_ACTIVE_SESSIONS = 2  # maximum concurrent refresh tokens per user
+
+
 def create_refresh_token(db: Session, user_id: uuid.UUID) -> str:
-    """Mint a new opaque refresh token, persist its hash, return the raw value."""
-    raw = secrets.token_urlsafe(32)  # 256 bits of entropy
+    """Mint a new opaque refresh token.
+
+    Enforces a per-user session cap (MAX_ACTIVE_SESSIONS) by revoking the
+    oldest active tokens when the limit is reached.  Also purges all
+    expired/revoked rows for this user as a lazy cleanup step — keeps the
+    refresh_tokens table lean without needing a background job.
+    """
+    now = _utcnow()
+
+    # 1. Purge expired and revoked tokens for this user (lazy cleanup).
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id,
+        (RefreshToken.revoked == True) | (RefreshToken.expires_at <= now),  # noqa: E712
+    ).delete(synchronize_session=False)
+    db.flush()
+
+    # 2. Enforce session cap: revoke oldest active sessions over the limit.
+    active = (
+        db.query(RefreshToken)
+        .filter(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked == False,  # noqa: E712
+            RefreshToken.expires_at > now,
+        )
+        .order_by(RefreshToken.created_at.asc())   # oldest first
+        .all()
+    )
+    excess = len(active) - (MAX_ACTIVE_SESSIONS - 1)   # slots needed for new token
+    for old in active[:max(0, excess)]:
+        old.revoked = True
+    if excess > 0:
+        db.flush()
+
+    # 3. Mint and store new token.
+    raw = secrets.token_urlsafe(32)
     rt = RefreshToken(
         id=uuid.uuid4(),
         user_id=user_id,
         token_hash=_sha256(raw),
-        expires_at=_utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         revoked=False,
     )
     db.add(rt)

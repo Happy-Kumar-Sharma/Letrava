@@ -25,7 +25,9 @@ import {
   ChevronRight,
   FileText,
   LogOut,
+  Pencil,
 } from 'lucide-react';
+import { useShare } from '../hooks/useShare.js';
 import { Avatar, Tag, Button, Logo } from './Shared.jsx';
 import { Editor } from './Editor.jsx';
 import { Profile } from './Profile.jsx';
@@ -302,6 +304,7 @@ const ReaderPane = ({ letter, onOpenProfile, me }) => {
   const [saved, setSaved] = useState(!!letter?.saved);
   const [following, setFollowing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const share = useShare();
   const { data: fresh, refetch } = useApi(
     letter ? `/api/letters/${letter.id}` : null,
     [letter?.id]
@@ -396,7 +399,7 @@ const ReaderPane = ({ letter, onOpenProfile, me }) => {
           <button style={iconBtnStyle(32)} onClick={onToggleSave} aria-label={saved ? 'Saved' : 'Save'} disabled={busy}>
             {saved ? <BookmarkCheck size={16} color={C.indigo} strokeWidth={1.75} /> : <Bookmark size={16} strokeWidth={1.75} />}
           </button>
-          <button style={iconBtnStyle(32)} aria-label="Share"><Share2 size={16} strokeWidth={1.75} /></button>
+          <button style={iconBtnStyle(32)} aria-label="Share" onClick={() => share({ title: full.title, text: full.excerpt, url: window.location.href })}><Share2 size={16} strokeWidth={1.75} /></button>
           <button style={iconBtnStyle(32)} aria-label="More"><MoreHorizontal size={16} strokeWidth={1.75} /></button>
         </div>
 
@@ -456,12 +459,13 @@ const ReaderPane = ({ letter, onOpenProfile, me }) => {
 // ---------------------------------------------------------------------------
 // Notifications pane (full-width in desktop)
 // ---------------------------------------------------------------------------
-const KIND_ICON_D = { reaction: Heart, comment: MessageCircle, follow: UserPlus, mention: AtSign };
+const KIND_ICON_D = { reaction: Heart, comment: MessageCircle, follow: UserPlus, mention: AtSign, new_letter: Feather };
 const KIND_TINT_D = {
-  reaction: { bg: '#FBE5DA', fg: '#B85E3E' },
-  comment:  { bg: '#E0F2EF', fg: '#0F766E' },
-  follow:   { bg: '#EEF2FF', fg: '#4338CA' },
-  mention:  { bg: '#F1ECFF', fg: '#6B21A8' },
+  reaction:   { bg: '#FBE5DA', fg: '#B85E3E' },
+  comment:    { bg: '#E0F2EF', fg: '#0F766E' },
+  follow:     { bg: '#EEF2FF', fg: '#4338CA' },
+  mention:    { bg: '#F1ECFF', fg: '#6B21A8' },
+  new_letter: { bg: '#EEF2FF', fg: '#4338CA' },
 };
 
 const NotificationsPane = () => {

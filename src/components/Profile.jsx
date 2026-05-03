@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Bell, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Bell, BellOff, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { ScreenHeader } from './MobileChrome.jsx';
 import { useApi, postJSON, delJSON, patchJSON } from '../lib/api.js';
+import { useShare } from '../hooks/useShare.js';
 
 const PALETTES = ['indigo', 'coral', 'teal', 'violet', 'amber'];
 
@@ -178,12 +179,15 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
   const [tab, setTab] = useState('letters');
   const [busy, setBusy] = useState(false);
   const [followState, setFollowState] = useState(null);
+  const [notifyState, setNotifyState] = useState(null);
   const [editing, setEditing] = useState(false);
   const [localProfile, setLocalProfile] = useState(null);
+  const share = useShare();
 
   const displayed = localProfile || profile;
-  const isFollowing = followState?.is_following ?? displayed?.is_following ?? false;
-  const followers = followState?.followers_count ?? displayed?.followers_count ?? 0;
+  const isFollowing   = followState?.is_following ?? displayed?.is_following ?? false;
+  const followers     = followState?.followers_count ?? displayed?.followers_count ?? 0;
+  const notify        = notifyState ?? followState?.notify_new_letters ?? displayed?.notify_new_letters ?? false;
 
   const toggleFollow = async () => {
     if (!displayed?.id || busy) return;
@@ -193,8 +197,23 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
         ? await delJSON(`/api/users/${displayed.id}/follow`)
         : await postJSON(`/api/users/${displayed.id}/follow`, {});
       setFollowState(next);
+      if (!isFollowing) setNotifyState(next.notify_new_letters ?? true);
+      else setNotifyState(false);
     } catch (err) {
       console.error('follow toggle failed', err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleNotify = async () => {
+    if (!displayed?.id || !isFollowing || busy) return;
+    setBusy(true);
+    try {
+      const res = await patchJSON(`/api/users/${displayed.id}/follow/notify`, {});
+      setNotifyState(res.notify_new_letters);
+    } catch (err) {
+      console.error('notify toggle failed', err);
     } finally {
       setBusy(false);
     }
@@ -328,10 +347,31 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </Button>
-              <button style={iconBtnSm} aria-label="Notify" title="Notify on new letters">
-                <Bell size={18} strokeWidth={1.75} />
+              <button
+                style={{
+                  ...iconBtnSm,
+                  color: isFollowing && notify ? '#6366F1' : '#374151',
+                  opacity: isFollowing ? 1 : 0.4,
+                }}
+                onClick={toggleNotify}
+                disabled={!isFollowing || busy}
+                aria-label={notify ? 'Turn off notifications' : 'Notify on new letters'}
+                title={notify ? 'Notifications on' : 'Get notified when they post'}
+              >
+                {notify && isFollowing
+                  ? <Bell size={18} strokeWidth={1.75} fill="#6366F1" color="#6366F1" />
+                  : <Bell size={18} strokeWidth={1.75} />
+                }
               </button>
-              <button style={iconBtnSm} aria-label="Share">
+              <button
+                style={iconBtnSm}
+                onClick={() => share({
+                  title: `${displayName} on Letrava`,
+                  text: displayed.bio || 'Read their letters on Letrava',
+                  url: window.location.href,
+                })}
+                aria-label="Share profile"
+              >
                 <Share2 size={18} strokeWidth={1.75} />
               </button>
             </>

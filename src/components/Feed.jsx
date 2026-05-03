@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Avatar, Tag, Button } from './Shared.jsx';
 import { useApi, putJSON, delJSON, postJSON } from '../lib/api.js';
+import { useShare } from '../hooks/useShare.js';
 
 const TABS = [
   { key: 'trending', label: 'Trending' },
@@ -225,6 +226,7 @@ const FeedLetter = ({ letter, onChanged, onOpen, onOpenProfile }) => {
   const [saveCount, setSaveCt] = useState(letter.saves);
   const [busy, setBusy]        = useState(false);
   const [hover, setHover]      = useState(false);
+  const share = useShare();
 
   const toggleBookmark = async (e) => {
     e.stopPropagation();
@@ -345,7 +347,11 @@ const FeedLetter = ({ letter, onChanged, onOpen, onOpenProfile }) => {
           {saved ? <BookmarkCheck size={16} strokeWidth={1.75} /> : <Bookmark size={16} strokeWidth={1.75} />}
           <span>{saveCount}</span>
         </button>
-        <button onClick={(e) => e.stopPropagation()} style={{ ...actionBtn, marginLeft: 'auto' }} aria-label="Share">
+        <button
+          onClick={(e) => { e.stopPropagation(); share({ title: letter.title, text: letter.excerpt, url: window.location.href }); }}
+          style={{ ...actionBtn, marginLeft: 'auto' }}
+          aria-label="Share"
+        >
           <Share2 size={16} strokeWidth={1.75} />
         </button>
       </div>

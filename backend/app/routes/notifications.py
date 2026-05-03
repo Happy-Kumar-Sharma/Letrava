@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session, aliased
 from ..auth import get_current_user
 from ..db import get_db
 from ..models import Comment, Follow, Letter, Reaction, User
-from sqlalchemy import or_
 from ..serializers import humanize_age
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -102,6 +101,34 @@ def get_notifications(
             "actor": _actor_dict(follower),
             "what": "started following you",
             "letter_title": None,
+            "age": humanize_age(created_at),
+            "unread": _unread(created_at),
+            "created_at": created_at,
+        })
+
+    # --- new letters from users I follow with notify=True ---
+    NLAuthor = aliased(User)
+    nlrows = db.execute(
+        select(Letter.id, Letter.created_at, Letter.title, NLAuthor)
+        .join(NLAuthor, NLAuthor.id == Letter.author_id)
+        .join(
+            Follow,
+            (Follow.followee_id == Letter.author_id) & (Follow.follower_id == user.id),
+        )
+        .where(
+            Follow.notify_new_letters == True,  # noqa: E712
+            Letter.author_id != user.id,
+        )
+        .order_by(Letter.created_at.desc())
+        .limit(_LIMIT)
+    ).all()
+    for lid, created_at, title, author in nlrows:
+        items.append({
+            "id": f"nl-{lid}",
+            "kind": "new_letter",
+            "actor": _actor_dict(author),
+            "what": "posted a new letter",
+            "letter_title": title,
             "age": humanize_age(created_at),
             "unread": _unread(created_at),
             "created_at": created_at,

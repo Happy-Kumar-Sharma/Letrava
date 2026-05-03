@@ -110,6 +110,13 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Global toast (fired by useShare or other hooks)
+  useEffect(() => {
+    const handler = (e) => showToast(e.detail.message, '#16A34A');
+    window.addEventListener('letrava:toast', handler);
+    return () => window.removeEventListener('letrava:toast', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auth init + unauthorized callback
   useEffect(() => {
     setOnUnauthorized(() => {
