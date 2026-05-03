@@ -4,9 +4,9 @@
  * clickable author names, correct avatar display.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Heart } from 'lucide-react';
+import { Heart, Trash2 } from 'lucide-react';
 import { Avatar, Button } from './Shared.jsx';
-import { useApi, postJSON, getJSON } from '../lib/api.js';
+import { useApi, postJSON, delJSON, getJSON } from '../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // @mention autocomplete
@@ -165,13 +165,18 @@ const CommentInput = ({ value, onChange, placeholder, rows = 2, inputStyle }) =>
 // ---------------------------------------------------------------------------
 // Single comment item (root or reply)
 // ---------------------------------------------------------------------------
-const CommentItem = ({ comment, letterId, onReply, onOpenProfile, refetch, isReply = false }) => {
-  const [liked, setLiked] = useState(comment.liked_by_me || false);
-  const [likes, setLikes] = useState(comment.likes_count || 0);
-  const [busy, setBusy] = useState(false);
+const CommentItem = ({ comment, letterId, me, onReply, onOpenProfile, refetch, isReply = false }) => {
+  const [liked, setLiked]           = useState(comment.liked_by_me || false);
+  const [likes, setLikes]           = useState(comment.likes_count || 0);
+  const [busy, setBusy]             = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
   const name = comment.author?.name?.startsWith('@')
     ? comment.author.name
     : `@${comment.author?.name}`;
+
+  // Only the comment's own author may delete it
+  const myId = me?.id ? String(me.id) : null;
+  const canDelete = myId && String(comment.author?.id) === myId;
 
   const toggleLike = async () => {
     if (busy) return;
@@ -186,6 +191,18 @@ const CommentItem = ({ comment, letterId, onReply, onOpenProfile, refetch, isRep
       setLikes((n) => n + (wasLiked ? 1 : -1));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const deleteComment = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await delJSON(`/api/letters/${letterId}/comments/${comment.id}`);
+      refetch();
+    } catch { /* ignore */ } finally {
+      setBusy(false);
+      setConfirmDel(false);
     }
   };
 
@@ -239,6 +256,44 @@ const CommentItem = ({ comment, letterId, onReply, onOpenProfile, refetch, isRep
             >
               Reply
             </button>
+          )}
+          {canDelete && !confirmDel && (
+            <button
+              onClick={() => setConfirmDel(true)}
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                padding: 0, display: 'inline-flex', alignItems: 'center', gap: 3,
+                color: '#9CA3AF', fontSize: 11, fontFamily: 'inherit',
+              }}
+              aria-label="Delete comment"
+            >
+              <Trash2 size={11} strokeWidth={1.75} />
+              Delete
+            </button>
+          )}
+          {canDelete && confirmDel && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: '#374151' }}>Delete?</span>
+              <button
+                onClick={deleteComment}
+                disabled={busy}
+                style={{
+                  background: '#EF4444', color: '#fff', border: 'none', borderRadius: 4,
+                  padding: '2px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDel(false)}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 11, color: '#9CA3AF', fontFamily: 'inherit', padding: 0,
+                }}
+              >
+                Cancel
+              </button>
+            </span>
           )}
         </div>
       </div>
@@ -329,6 +384,7 @@ export const CommentsSection = ({ letterId, me, onOpenProfile, compact = false }
           <CommentItem
             comment={c}
             letterId={letterId}
+            me={me}
             onOpenProfile={onOpenProfile}
             onReply={(target) => {
               setReplyTarget(target);
@@ -366,6 +422,7 @@ export const CommentsSection = ({ letterId, me, onOpenProfile, compact = false }
                   key={r.id}
                   comment={r}
                   letterId={letterId}
+                  me={me}
                   onOpenProfile={onOpenProfile}
                   refetch={refetch}
                   isReply

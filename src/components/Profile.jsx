@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Bell, BellOff, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Bell, BellOff, Camera, Heart, MessageCircle, Share2, X, ArrowLeft, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { ScreenHeader } from './MobileChrome.jsx';
 import { useApi, postJSON, delJSON, patchJSON } from '../lib/api.js';
@@ -157,6 +157,65 @@ const EditProfileForm = ({ profile, onSaved, onCancel }) => {
         <Button variant="secondary" onClick={onCancel} style={{ flex: 1, justifyContent: 'center' }}>
           Cancel
         </Button>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Inline letter row with optional delete
+// ---------------------------------------------------------------------------
+const ProfileLetterRow = ({ letter: l, canDelete, onOpen, onDeleted }) => {
+  const [confirmDel, setConfirmDel] = useState(false);
+  return (
+    <div
+      onClick={confirmDel ? undefined : onOpen}
+      style={{ padding: 16, borderBottom: '1px solid #F3F4F6', cursor: confirmDel ? 'default' : 'pointer' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 17, fontWeight: 500, color: '#111827', lineHeight: 1.3, marginBottom: 4 }}>{l.title}</div>
+          <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 13, lineHeight: 1.55, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.excerpt}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
+            <span>{l.age} ago</span>
+            <span>{l.read_time}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Heart size={11} strokeWidth={1.75} />{l.reactions}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><MessageCircle size={11} strokeWidth={1.75} />{l.comments}</span>
+          </div>
+        </div>
+        {canDelete && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, paddingTop: 2 }}
+          >
+            {!confirmDel ? (
+              <button
+                onClick={() => setConfirmDel(true)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: '#9CA3AF', display: 'inline-flex' }}
+                aria-label="Delete letter"
+                title="Delete letter"
+              >
+                <Trash2 size={14} strokeWidth={1.75} />
+              </button>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                <span style={{ color: '#374151' }}>Delete?</span>
+                <button
+                  onClick={async () => {
+                    try { await delJSON(`/api/letters/${l.id}`); onDeleted?.(); }
+                    catch { /* ignore */ }
+                    setConfirmDel(false);
+                  }}
+                  style={{ background: '#EF4444', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                >Yes</button>
+                <button
+                  onClick={() => setConfirmDel(false)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, color: '#9CA3AF', fontFamily: 'inherit' }}
+                >Cancel</button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -407,16 +466,13 @@ export const Profile = ({ author, onOpenLetter, onBack, self }) => {
             </div>
           )}
           {letters && letters.map((l) => (
-            <div key={l.id} onClick={() => onOpenLetter(l)} style={{ padding: 16, borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
-              <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 17, fontWeight: 500, color: '#111827', lineHeight: 1.3, marginBottom: 4 }}>{l.title}</div>
-              <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 13, lineHeight: 1.55, color: '#6B7280', marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.excerpt}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
-                <span>{l.age} ago</span>
-                <span>{l.read_time}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Heart size={11} strokeWidth={1.75} />{l.reactions}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><MessageCircle size={11} strokeWidth={1.75} />{l.comments}</span>
-              </div>
-            </div>
+            <ProfileLetterRow
+              key={l.id}
+              letter={l}
+              canDelete={!!self}
+              onOpen={() => onOpenLetter(l)}
+              onDeleted={refetch}
+            />
           ))}
         </>
       )}

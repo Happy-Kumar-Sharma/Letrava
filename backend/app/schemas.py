@@ -90,6 +90,13 @@ class LetterCreate(BaseModel):
     mood: Optional[str] = None
 
 
+class LetterUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    body: Optional[str] = Field(None, min_length=1)
+    tags: Optional[list[str]] = Field(None, max_length=5)
+    mood: Optional[str] = None
+
+
 class LetterOut(BaseModel):
     id: int
     title: str

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..auth import get_current_user, get_optional_user
 from ..db import get_db
 from ..models import Follow, Letter, Reaction, User
-from ..schemas import LetterCreate, LetterOut
+from ..schemas import LetterCreate, LetterOut, LetterUpdate
 from ..serializers import excerpt_from, letter_to_dict, upsert_tags
 
 router = APIRouter(prefix="/api/letters", tags=["letters"])
@@ -91,6 +91,38 @@ def get_letter(
     if not letter:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
     return letter_to_dict(db, letter, viewer.id if viewer else None)
+
+
+@router.patch("/{letter_id}", response_model=LetterOut)
+def update_letter(
+    letter_id: int,
+    body: LetterUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Author-only: update title, body, tags, and/or mood."""
+    letter = db.scalar(
+        select(Letter).options(selectinload(Letter.author)).where(Letter.id == letter_id)
+    )
+    if not letter:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
+    if letter.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your letter")
+    if body.title is not None:
+        letter.title = body.title.strip()
+    if body.body is not None:
+        letter.body = body.body
+        letter.excerpt = excerpt_from(body.body)
+    if body.mood is not None:
+        letter.mood = body.mood
+    if body.tags is not None:
+        upsert_tags(db, letter.id, body.tags)
+    db.commit()
+    db.refresh(letter)
+    letter = db.scalar(
+        select(Letter).options(selectinload(Letter.author)).where(Letter.id == letter_id)
+    )
+    return letter_to_dict(db, letter, user.id)
 
 
 @router.delete("/{letter_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)

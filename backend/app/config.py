@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # Auth — JWT_SECRET is required; startup fails loudly if absent
     JWT_SECRET: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440   # 24 h — survives normal sessions
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 365      # 1 year — effectively permanent
     SECURE_COOKIES: bool = False  # set True in production (HTTPS only)
 
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"

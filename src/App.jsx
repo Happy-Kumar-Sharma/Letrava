@@ -9,7 +9,7 @@ import { LoginModal } from './components/LoginModal.jsx';
 import { ProfileGate } from './components/ProfileGate.jsx';
 import { NotificationsScreen } from './components/NotificationsScreen.jsx';
 import { DesktopShell } from './components/Desktop.jsx';
-import { refreshAccessToken, setOnUnauthorized, authSignout, triggerGlobalRefresh } from './lib/api.js';
+import { getJSON, setOnUnauthorized, authSignout, triggerGlobalRefresh } from './lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -84,6 +84,7 @@ export default function App() {
   const [loginMode, setLoginMode]   = useState('signup');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorPrompt, setEditorPrompt] = useState(null);
+  const [editorLetter, setEditorLetter] = useState(null);
   const [feedTick, setFeedTick]     = useState(0);
   const [toast, setToast]           = useState(null);
   const [isDesktop, setIsDesktop]   = useState(() => window.innerWidth >= 1024);
@@ -119,17 +120,24 @@ export default function App() {
 
   // Auth init + unauthorized callback
   useEffect(() => {
+    // Only silently clear auth state — never force-open the login modal.
+    // The user will see the unauthenticated UI and can sign in whenever they choose.
+    // Forced logouts were causing unexpected session drops; the access token is now
+    // 24 h and the refresh token 1 year, so this callback fires only on genuine
+    // multi-day inactivity or an explicit server-side session revocation.
     setOnUnauthorized(() => {
       setAuthed(false);
       setView('shell');
       setTab('home');
-      setLoginMode('signin');
-      setLoginOpen(true);
     });
-    refreshAccessToken().then((ok) => {
-      setAuthed(!!ok);
-      setAuthChecked(true);
-    });
+    // Use the access_token cookie (Path=/api, valid 15 min) to check auth on startup.
+    // If it's still valid → authed immediately, no cookie rotation needed.
+    // If it's expired  → api() auto-retries after calling POST /api/auth/refresh,
+    //                    so the refresh_token cookie is only sent when truly needed.
+    // If both fail     → _onUnauthorized fires, then .catch sets authChecked=true.
+    getJSON('/api/auth/me')
+      .then(() => { setAuthed(true);  setAuthChecked(true); })
+      .catch(() => { setAuthed(false); setAuthChecked(true); });
     return () => clearTimeout(toastTimer.current);
   }, []);
 
@@ -218,16 +226,24 @@ export default function App() {
     setView('profile');
   };
 
-  const openEditor = (prompt = null) => {
+  const openEditor = (prompt = null, letter = null) => {
     setEditorPrompt(prompt);
+    setEditorLetter(letter);
     setEditorOpen(true);
   };
 
-  const handlePublished = () => {
+  const handlePublished = (result) => {
     setEditorOpen(false);
     setEditorPrompt(null);
+    setEditorLetter(null);
     setFeedTick((n) => n + 1);
-    setTab('home');
+    // After editing, jump back to the updated letter detail
+    if (result?.id && editorLetter) {
+      setActiveLetter(result);
+      setView('letter');
+    } else {
+      setTab('home');
+    }
   };
 
   const handleTabChange = (next) => {
@@ -242,7 +258,14 @@ export default function App() {
       return <NotificationsScreen onBack={() => setView('shell')} />;
     }
     if (view === 'letter' && activeLetter) {
-      return <LetterDetail letter={activeLetter} onBack={() => setView('shell')} onOpenProfile={openProfile} me={me} />;
+      return <LetterDetail
+        letter={activeLetter}
+        onBack={() => setView('shell')}
+        onOpenProfile={openProfile}
+        me={me}
+        onDeleted={() => { setFeedTick((n) => n + 1); setView('shell'); }}
+        onEdit={(l) => openEditor(null, l)}
+      />;
     }
     if (view === 'profile') {
       return (
@@ -253,7 +276,7 @@ export default function App() {
         />
       );
     }
-    if (tab === 'home')    return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} onWrite={openEditor} />;
+    if (tab === 'home')    return <Feed key={feedTick} onOpenLetter={openLetter} onOpenProfile={openProfile} onWrite={openEditor} me={me} onLetterDeleted={() => setFeedTick((n) => n + 1)} onEditLetter={(l) => openEditor(null, l)} />;
     if (tab === 'search')  return <SearchScreen onOpenLetter={openLetter} onOpenProfile={openProfile} />;
     if (tab === 'saved')   return <SavedScreen onOpenLetter={openLetter} />;
     if (tab === 'profile') return <Profile author={{ id: me.id, name: `@${me.username}`, palette: me.palette }} self onOpenLetter={openLetter} />;
@@ -298,7 +321,8 @@ export default function App() {
                 {editorOpen && (
                   <Editor
                     initialPrompt={editorPrompt}
-                    onClose={() => { setEditorOpen(false); setEditorPrompt(null); }}
+                    initialLetter={editorLetter}
+                    onClose={() => { setEditorOpen(false); setEditorPrompt(null); setEditorLetter(null); }}
                     onSubmit={handlePublished}
                   />
                 )}

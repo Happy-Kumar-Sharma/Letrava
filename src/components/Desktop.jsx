@@ -26,6 +26,7 @@ import {
   FileText,
   LogOut,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useShare } from '../hooks/useShare.js';
 import { Avatar, Tag, Button, Logo } from './Shared.jsx';
@@ -299,11 +300,13 @@ const FeedColumn = ({ activeId, onOpen, route = 'discover', feed = 'trending', o
 // ---------------------------------------------------------------------------
 // Reader pane (inspector)
 // ---------------------------------------------------------------------------
-const ReaderPane = ({ letter, onOpenProfile, me }) => {
-  const [reaction, setReaction] = useState(letter?.my_reaction || null);
-  const [saved, setSaved] = useState(!!letter?.saved);
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy] = useState(false);
+const ReaderPane = ({ letter, onOpenProfile, me, onLetterDeleted }) => {
+  const [reaction, setReaction]     = useState(letter?.my_reaction || null);
+  const [saved, setSaved]           = useState(!!letter?.saved);
+  const [following, setFollowing]   = useState(false);
+  const [busy, setBusy]             = useState(false);
+  const [showMenu, setShowMenu]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
   const share = useShare();
   const { data: fresh, refetch } = useApi(
     letter ? `/api/letters/${letter.id}` : null,
@@ -400,7 +403,47 @@ const ReaderPane = ({ letter, onOpenProfile, me }) => {
             {saved ? <BookmarkCheck size={16} color={C.indigo} strokeWidth={1.75} /> : <Bookmark size={16} strokeWidth={1.75} />}
           </button>
           <button style={iconBtnStyle(32)} aria-label="Share" onClick={() => share({ title: full.title, text: full.excerpt, url: window.location.href })}><Share2 size={16} strokeWidth={1.75} /></button>
-          <button style={iconBtnStyle(32)} aria-label="More"><MoreHorizontal size={16} strokeWidth={1.75} /></button>
+          {me && String(me.id) === String(full.author?.id) ? (
+            <div style={{ position: 'relative' }}>
+              <button style={iconBtnStyle(32)} aria-label="More" onClick={() => { setShowMenu(!showMenu); setConfirmDel(false); }}>
+                <MoreHorizontal size={16} strokeWidth={1.75} />
+              </button>
+              {showMenu && (
+                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: '#fff', border: '1px solid ' + C.line2, borderRadius: 10, boxShadow: '0 4px 16px rgba(17,24,39,0.10)', minWidth: 160, overflow: 'hidden' }}>
+                  {!confirmDel ? (
+                    <button
+                      onClick={() => setConfirmDel(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#EF4444', fontFamily: C.sans, textAlign: 'left' }}
+                    >
+                      <Pencil size={14} strokeWidth={1.75} style={{ display: 'none' }} />
+                      <Trash2 size={14} strokeWidth={1.75} />
+                      Delete letter
+                    </button>
+                  ) : (
+                    <div style={{ padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#374151', marginBottom: 8 }}>Delete this letter?</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={async () => {
+                            try { await delJSON(`/api/letters/${full.id}`); onLetterDeleted?.(); }
+                            catch { /* ignore */ }
+                            setShowMenu(false); setConfirmDel(false);
+                          }}
+                          style={{ flex: 1, padding: '6px 0', background: '#EF4444', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.sans }}
+                        >Delete</button>
+                        <button
+                          onClick={() => { setConfirmDel(false); setShowMenu(false); }}
+                          style={{ flex: 1, padding: '6px 0', background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.sans }}
+                        >Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button style={iconBtnStyle(32)} aria-label="More"><MoreHorizontal size={16} strokeWidth={1.75} /></button>
+          )}
         </div>
 
         <article style={{ fontFamily: C.serif, fontSize: 19, lineHeight: 1.75, color: C.ink2, marginBottom: 24 }}>
@@ -784,7 +827,7 @@ export const DesktopShell = ({ me, onSignOut }) => {
               onFeedChange={setFeedTab}
               onOpenProfile={openProfile}
             />
-            <ReaderPane letter={activeLetter} me={me} onOpenProfile={openProfile} />
+            <ReaderPane letter={activeLetter} me={me} onOpenProfile={openProfile} onLetterDeleted={() => setActiveLetter(null)} />
           </>
         )}
 

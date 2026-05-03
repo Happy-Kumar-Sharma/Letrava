@@ -8,6 +8,7 @@ import {
   BookmarkCheck,
   Share2,
   MoreHorizontal,
+  Trash2,
 } from 'lucide-react';
 import { Avatar, Tag, Button } from './Shared.jsx';
 import { useApi, putJSON, delJSON, postJSON } from '../lib/api.js';
@@ -26,7 +27,7 @@ const MOODS = [
   { key: 'sad',        label: 'Sad',        color: '#64748B' },
 ];
 
-export const Feed = ({ onOpenLetter, onOpenProfile, onWrite }) => {
+export const Feed = ({ onOpenLetter, onOpenProfile, onWrite, me, onLetterDeleted, onEditLetter }) => {
   const [mode, setMode] = useState('trending');
   const [moodFilter, setMoodFilter] = useState(null);
   const apiUrl = `/api/letters?feed=${mode}${moodFilter ? `&mood=${moodFilter}` : ''}`;
@@ -212,21 +213,28 @@ export const Feed = ({ onOpenLetter, onOpenProfile, onWrite }) => {
         <FeedLetter
           key={l.id}
           letter={l}
+          me={me}
           onChanged={refetch}
           onOpen={() => onOpenLetter(l)}
           onOpenProfile={() => onOpenProfile(l.author)}
+          onDeleted={() => { refetch(); onLetterDeleted?.(); }}
+          onEdit={() => onEditLetter?.(l)}
         />
       ))}
     </div>
   );
 };
 
-const FeedLetter = ({ letter, onChanged, onOpen, onOpenProfile }) => {
-  const [saved, setSaved]      = useState(!!letter.saved);
-  const [saveCount, setSaveCt] = useState(letter.saves);
-  const [busy, setBusy]        = useState(false);
-  const [hover, setHover]      = useState(false);
+const FeedLetter = ({ letter, me, onChanged, onOpen, onOpenProfile, onDeleted, onEdit }) => {
+  const [saved, setSaved]           = useState(!!letter.saved);
+  const [saveCount, setSaveCt]      = useState(letter.saves);
+  const [busy, setBusy]             = useState(false);
+  const [hover, setHover]           = useState(false);
+  const [showMenu, setShowMenu]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
   const share = useShare();
+
+  const isAuthor = me && String(me.id) === String(letter.author?.id);
 
   const toggleBookmark = async (e) => {
     e.stopPropagation();
@@ -282,16 +290,61 @@ const FeedLetter = ({ letter, onChanged, onOpen, onOpenProfile }) => {
             {letter.age} ago · {letter.read_time} read
           </div>
         </div>
-        <button
-          onClick={(e) => e.stopPropagation()}
-          aria-label="More"
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            padding: 4, color: '#9CA3AF',
-          }}
-        >
-          <MoreHorizontal size={18} strokeWidth={1.75} />
-        </button>
+        <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); setConfirmDel(false); }}
+            aria-label="More"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: '#9CA3AF' }}
+          >
+            <MoreHorizontal size={18} strokeWidth={1.75} />
+          </button>
+          {showMenu && isAuthor && (
+            <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 4px 16px rgba(17,24,39,0.10)', minWidth: 150, overflow: 'hidden' }}>
+              {/* Edit */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit?.(); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', fontFamily: 'inherit', textAlign: 'left' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit letter
+              </button>
+              <div style={{ height: 1, background: '#F3F4F6' }} />
+              {!confirmDel ? (
+                <button onClick={() => setConfirmDel(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#EF4444', fontFamily: 'inherit', textAlign: 'left' }}>
+                  <Trash2 size={14} strokeWidth={1.75} /> Delete letter
+                </button>
+              ) : (
+                <div style={{ padding: '10px 14px' }}>
+                  <div style={{ fontSize: 12, color: '#374151', marginBottom: 8 }}>Delete this letter?</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await delJSON(`/api/letters/${letter.id}`);
+                          onDeleted?.();
+                        } catch { /* ignore */ }
+                        setShowMenu(false); setConfirmDel(false);
+                      }}
+                      style={{
+                        flex: 1, padding: '6px 0', background: '#EF4444', color: '#fff',
+                        border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >Delete</button>
+                    <button
+                      onClick={() => { setConfirmDel(false); setShowMenu(false); }}
+                      style={{
+                        flex: 1, padding: '6px 0', background: '#F3F4F6', color: '#374151',
+                        border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <h3
         style={{

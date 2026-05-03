@@ -11,6 +11,7 @@ import {
   BookmarkCheck,
   Share2,
   MoreHorizontal,
+  Trash2,
 } from 'lucide-react';
 import { Avatar, Tag, Button, iconBtnSm } from './Shared.jsx';
 import { CommentsSection } from './CommentsSection.jsx';
@@ -28,15 +29,87 @@ const REACTIONS = [
   { key: 'inspiring',  label: 'Inspiring',  icon: 'Sparkles',  color: '#F59E0B' },
 ];
 
-export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) => {
+// ---------------------------------------------------------------------------
+// Inline-formatting renderer: **bold** _italic_ ## heading > quote - bullet
+// ---------------------------------------------------------------------------
+function parseInline(text) {
+  return text.split(/(\*\*[^*\n]+\*\*|_[^_\n]+_)/g).map((seg, i) => {
+    if (seg.startsWith('**') && seg.endsWith('**')) return <strong key={i}>{seg.slice(2, -2)}</strong>;
+    if (seg.startsWith('_')  && seg.endsWith('_'))  return <em key={i}>{seg.slice(1, -1)}</em>;
+    return seg;
+  });
+}
+
+function BodyRenderer({ body }) {
+  const blocks = (body || '').split('\n\n');
+  const elements = [];
+
+  blocks.forEach((block, bi) => {
+    if (!block.trim()) return;
+    const lines = block.split('\n');
+
+    // Bullet list block
+    if (lines.every(l => l.startsWith('- '))) {
+      elements.push(
+        <ul key={bi} style={{ margin: '0 0 18px', paddingLeft: 22 }}>
+          {lines.map((l, i) => <li key={i} style={{ marginBottom: 4 }}>{parseInline(l.slice(2))}</li>)}
+        </ul>
+      );
+      return;
+    }
+
+    lines.forEach((line, li) => {
+      const key = `${bi}-${li}`;
+      if (line.startsWith('## ')) {
+        elements.push(
+          <div key={key} style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 21, fontWeight: 500, color: '#111827', margin: '26px 0 8px', lineHeight: 1.2 }}>
+            {parseInline(line.slice(3))}
+          </div>
+        );
+      } else if (line.startsWith('> ')) {
+        elements.push(
+          <blockquote key={key} style={{ borderLeft: '3px solid #E07856', paddingLeft: 16, margin: '0 0 18px', color: '#4B5563', fontStyle: 'italic' }}>
+            {parseInline(line.slice(2))}
+          </blockquote>
+        );
+      } else if (line.startsWith('- ')) {
+        elements.push(
+          <div key={key} style={{ paddingLeft: 18, marginBottom: 6 }}>
+            <span style={{ color: '#E07856', marginRight: 6 }}>•</span>{parseInline(line.slice(2))}
+          </div>
+        );
+      } else if (bi === 0 && li === 0) {
+        // Drop-cap on very first line
+        const first = line.charAt(0);
+        const rest  = line.slice(1);
+        elements.push(
+          <p key={key} style={{ margin: '0 0 18px' }}>
+            <span style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 56, lineHeight: 0.8, float: 'left', color: '#E07856', marginRight: 8, marginTop: 6, fontWeight: 500 }}>{first}</span>
+            {parseInline(rest)}
+          </p>
+        );
+      } else {
+        elements.push(<p key={key} style={{ margin: '0 0 18px' }}>{parseInline(line)}</p>);
+      }
+    });
+  });
+
+  return <>{elements}</>;
+}
+
+export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me, onDeleted, onEdit }) => {
   const share = useShare();
   const { data: fresh, refetch } = useApi(`/api/letters/${seedLetter.id}`, [seedLetter.id]);
   const letter = fresh || seedLetter;
 
-  const [reaction, setReaction]   = useState(letter.my_reaction || null);
-  const [saved, setSaved]         = useState(!!letter.saved);
-  const [following, setFollowing] = useState(false);
-  const [busy, setBusy]           = useState(false);
+  const [reaction, setReaction]     = useState(letter.my_reaction || null);
+  const [saved, setSaved]           = useState(!!letter.saved);
+  const [following, setFollowing]   = useState(false);
+  const [busy, setBusy]             = useState(false);
+  const [showMenu, setShowMenu]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const isAuthor = me && letter.author && String(me.id) === String(letter.author.id);
 
   // Reading progress (0..1) — drives the thin bar at the top of the screen.
   const scrollRef = useRef(null);
@@ -117,11 +190,6 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) 
   // letter.reaction_breakdown as { [kind]: count }).
   const breakdown = letter.reaction_breakdown;
 
-  // Drop-cap split: first character of first paragraph rendered large.
-  const paragraphs = (letter.body || '').split('\n\n');
-  const [firstP, ...restP] = paragraphs;
-  const firstChar = (firstP || '').charAt(0);
-  const firstRest = (firstP || '').slice(1);
 
   return (
     <div ref={scrollRef}>
@@ -180,9 +248,45 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) 
             >
               <Share2 size={20} strokeWidth={1.75} />
             </button>
-            <button style={iconBtnSm} aria-label="More">
-              <MoreHorizontal size={20} strokeWidth={1.75} />
-            </button>
+            {isAuthor && (
+              <div style={{ position: 'relative' }}>
+                <button style={iconBtnSm} aria-label="More options" onClick={() => { setShowMenu(!showMenu); setConfirmDel(false); }}>
+                  <MoreHorizontal size={20} strokeWidth={1.75} />
+                </button>
+                {showMenu && (
+                  <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 4px 16px rgba(17,24,39,0.10)', minWidth: 160, overflow: 'hidden' }}>
+                    {/* Edit */}
+                    <button
+                      onClick={() => { setShowMenu(false); onEdit?.(letter); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#374151', fontFamily: 'inherit', textAlign: 'left' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit letter
+                    </button>
+                    <div style={{ height: 1, background: '#F3F4F6' }} />
+                    {/* Delete */}
+                    {!confirmDel ? (
+                      <button onClick={() => setConfirmDel(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: '#EF4444', fontFamily: 'inherit', textAlign: 'left' }}>
+                        <Trash2 size={14} strokeWidth={1.75} /> Delete letter
+                      </button>
+                    ) : (
+                      <div style={{ padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, color: '#374151', marginBottom: 8 }}>Delete this letter?</div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={async () => { try { await delJSON(`/api/letters/${letter.id}`); onDeleted?.(); onBack?.(); } catch { /* ignore */ } }} style={{ flex: 1, padding: '6px 0', background: '#EF4444', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                          <button onClick={() => { setConfirmDel(false); setShowMenu(false); }} style={{ flex: 1, padding: '6px 0', background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {!isAuthor && (
+              <button style={iconBtnSm} aria-label="More">
+                <MoreHorizontal size={20} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
         </div>
         <div style={{ height: 2, background: '#F3F4F6' }}>
@@ -266,38 +370,8 @@ export const LetterDetail = ({ letter: seedLetter, onBack, onOpenProfile, me }) 
 
       {/* Body */}
       <div style={{ padding: '0 24px 28px' }}>
-        <article
-          style={{
-            fontFamily: 'Fraunces, Georgia, serif',
-            fontSize: 17,
-            lineHeight: 1.75,
-            color: '#1F2937',
-          }}
-        >
-          {firstP && (
-            <p style={{ margin: '0 0 18px' }}>
-              <span
-                style={{
-                  fontFamily: 'Fraunces, Georgia, serif',
-                  fontSize: 56,
-                  lineHeight: 0.8,
-                  float: 'left',
-                  color: '#E07856',
-                  marginRight: 8,
-                  marginTop: 6,
-                  fontWeight: 500,
-                }}
-              >
-                {firstChar}
-              </span>
-              {firstRest}
-            </p>
-          )}
-          {restP.map((p, i) => (
-            <p key={i} style={{ margin: '0 0 18px' }}>
-              {p}
-            </p>
-          ))}
+        <article style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: 17, lineHeight: 1.75, color: '#1F2937' }}>
+          <BodyRenderer body={letter.body} />
         </article>
         {letter.tags && letter.tags.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 22 }}>

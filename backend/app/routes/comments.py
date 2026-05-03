@@ -140,6 +140,24 @@ def post_comment(
     return _to_dict(c, [], 0, False)
 
 
+@router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_comment(
+    letter_id: int,
+    comment_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Only the comment's own author may delete it."""
+    comment = db.get(Comment, comment_id)
+    if not comment or comment.letter_id != letter_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+    if comment.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only delete your own comments")
+    db.delete(comment)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/{comment_id}/like", status_code=status.HTTP_200_OK)
 def toggle_like(
     letter_id: int,
